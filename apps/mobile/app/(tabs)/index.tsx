@@ -1,11 +1,23 @@
+import React, { useState } from "react";
 import { StyleSheet, ScrollView } from "react-native";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { AddTaskForm } from "@/components/tasks/AddTaskForm";
 import { TaskList } from "@/components/tasks/TaskList";
+import { FloatingActionButton } from "@/components/tasks/FloatingActionButton";
 
 export default function HomeScreen() {
+  const [isAddTaskModalVisible, setIsAddTaskModalVisible] = useState(false);
+
+  const openAddTaskModal = () => {
+    setIsAddTaskModalVisible(true);
+  };
+
+  const closeAddTaskModal = () => {
+    setIsAddTaskModalVisible(false);
+  };
+
   return (
     <ThemedView style={styles.container}>
       <ThemedView style={styles.header}>
@@ -14,9 +26,15 @@ export default function HomeScreen() {
       </ThemedView>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <AddTaskForm />
         <TaskList />
       </ScrollView>
+
+      <FloatingActionButton onPress={openAddTaskModal} />
+
+      <AddTaskForm
+        visible={isAddTaskModalVisible}
+        onClose={closeAddTaskModal}
+      />
     </ThemedView>
   );
 }
