@@ -1,0 +1,20 @@
+{
+  "name": "fractal-assembly",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "start:mobile": "pnpm --filter mobile start",
+    "prepare": "husky install",
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+    "test": "jest --passWithNoTests"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.38.0",
+    "@typescript-eslint/parser": "^8.38.0",
+    "eslint": "^9.31.0",
+    "husky": "^8.0.3",
+    "jest": "^30.0.5",
+    "typescript": "~5.8.3"
+  },
+  "type": "module"
+}
