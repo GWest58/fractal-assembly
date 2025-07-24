@@ -97,8 +97,7 @@ export const TaskList: React.FC = () => {
         </ThemedText>
         {regularTasks.length > 0 && (
           <ThemedText style={styles.statsText}>
-            Other: {completedRegularTasks.length}/{regularTasks.length}{" "}
-            completed
+            {`Other: ${completedRegularTasks.length}/${regularTasks.length} completed`}
           </ThemedText>
         )}
       </ThemedView>

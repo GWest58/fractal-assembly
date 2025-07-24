@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "scripts": {
     "start:mobile": "pnpm --filter mobile start",
+    "start:backend": "pnpm --filter backend start",
+    "dev:backend": "pnpm --filter backend dev",
+    "init-db": "pnpm --filter backend init-db",
     "prepare": "husky install",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "test": "jest --passWithNoTests"

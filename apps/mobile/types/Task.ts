@@ -22,6 +22,7 @@ export type UpdateTaskInput = {
   completed?: boolean;
   completedToday?: boolean;
   lastCompletedDate?: Date;
+  category?: "health" | "wellness" | "productivity" | "personal";
 };
 
 export const FOUNDATIONAL_HABITS = [

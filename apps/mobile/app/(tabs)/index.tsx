@@ -4,6 +4,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 
 import { ThemedText } from "@/components/ThemedText";
@@ -12,13 +13,14 @@ import { AddTaskForm } from "@/components/tasks/AddTaskForm";
 import { TaskList } from "@/components/tasks/TaskList";
 import { FloatingActionButton } from "@/components/tasks/FloatingActionButton";
 import { useTask } from "@/contexts/TaskContext";
+import { debugApi, apiClient } from "@/services/api";
 
 export default function HomeScreen() {
   const [isAddTaskModalVisible, setIsAddTaskModalVisible] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [debugInfo, setDebugInfo] = useState("");
-  const { resetDailyHabits, state } = useTask();
+  const { resetDailyHabits, refreshTasks, state } = useTask();
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -60,23 +62,31 @@ export default function HomeScreen() {
     }
   };
 
-  const confirmReset = () => {
+  const confirmReset = async () => {
     console.log(
       "Web reset triggered - before reset:",
       state.tasks.filter((t) => t.isFoundational),
     );
-    resetDailyHabits();
-    setShowResetConfirm(false);
-    // Clear debug info and refresh it
-    setDebugInfo("");
-    // Add a brief success message for web
-    setTimeout(() => {
-      console.log(
-        "Web reset triggered - after reset:",
-        state.tasks.filter((t) => t.isFoundational),
+
+    try {
+      await resetDailyHabits();
+      setShowResetConfirm(false);
+      // Clear debug info and refresh it
+      setDebugInfo("");
+      // Add a brief success message for web
+      setTimeout(() => {
+        console.log(
+          "Web reset triggered - after reset:",
+          state.tasks.filter((t) => t.isFoundational),
+        );
+        debugState();
+      }, 100);
+    } catch (error) {
+      console.error("Reset failed:", error);
+      setDebugInfo(
+        `Reset failed: ${error instanceof Error ? error.message : String(error)}`,
       );
-      debugState();
-    }, 100);
+    }
   };
 
   const cancelReset = () => {
@@ -89,10 +99,40 @@ export default function HomeScreen() {
       .map((h) => `${h.text}: ${h.completedToday ? "✅" : "⭕"}`)
       .join(" | ");
     setDebugInfo(
-      `${debugStr} | Total: ${habits.length}, Completed: ${completedToday.length}`,
+      `${debugStr} | Total: ${habits.length}, Completed: ${completedToday.length} | Online: ${state.isOnline ? "✅" : "🔴"}`,
     );
     console.log("Current foundational habits state:", habits);
     console.log("Completed today count:", completedToday.length);
+    console.log("Connection status:", state.isOnline);
+    console.log("Loading state:", state.loading);
+    console.log("Error:", state.error);
+  };
+
+  const testApiConnection = async () => {
+    try {
+      setDebugInfo("Testing API connection...");
+      await debugApi.fullTest();
+      setDebugInfo("✅ API connection test passed!");
+    } catch (error) {
+      setDebugInfo(
+        `❌ API test failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      console.error("API test failed:", error);
+    }
+  };
+
+  const manualResetTest = async () => {
+    try {
+      setDebugInfo("Testing manual reset...");
+      const result = await apiClient.resetDay();
+      setDebugInfo(`✅ Manual reset success: ${JSON.stringify(result)}`);
+      await refreshTasks();
+    } catch (error) {
+      setDebugInfo(
+        `❌ Manual reset failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      console.error("Manual reset failed:", error);
+    }
   };
 
   const foundationalHabits = state.tasks.filter((task) => task.isFoundational);
@@ -122,28 +162,70 @@ export default function HomeScreen() {
             <ThemedText style={styles.dateText}>
               {formatDate(currentDate)}
             </ThemedText>
-            <ThemedText style={styles.subtitle}>
-              Daily Progress: {completedToday.length}/
-              {foundationalHabits.length} ({progressPercentage}%)
-            </ThemedText>
+            <ThemedView style={styles.statusRow}>
+              <ThemedText style={styles.subtitle}>
+                Daily Progress: {completedToday.length}/
+                {foundationalHabits.length} ({progressPercentage}%)
+              </ThemedText>
+              <ThemedText style={styles.connectionStatus}>
+                {state.isOnline ? "🟢 Online" : "🔴 Offline"}
+              </ThemedText>
+            </ThemedView>
+            {state.error && (
+              <ThemedText style={styles.errorText}>⚠️ {state.error}</ThemedText>
+            )}
           </ThemedView>
           <ThemedView style={styles.buttonGroup}>
             <TouchableOpacity
               onPress={handleDailyReset}
-              style={styles.resetButton}
+              style={[
+                styles.resetButton,
+                state.loading && styles.buttonDisabled,
+              ]}
+              disabled={state.loading}
             >
-              <ThemedText style={styles.resetButtonText}>
-                🔄 Reset Day
-              </ThemedText>
+              {state.loading ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <ThemedText style={styles.resetButtonText}>
+                  🔄 Reset Day
+                </ThemedText>
+              )}
             </TouchableOpacity>
             <TouchableOpacity onPress={debugState} style={styles.debugButton}>
               <ThemedText style={styles.debugButtonText}>🐛 Debug</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={refreshTasks}
+              style={styles.refreshButton}
+            >
+              <ThemedText style={styles.refreshButtonText}>🔄</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={testApiConnection}
+              style={styles.testButton}
+            >
+              <ThemedText style={styles.testButtonText}>🧪</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={manualResetTest}
+              style={styles.manualResetButton}
+            >
+              <ThemedText style={styles.manualResetButtonText}>⚡</ThemedText>
             </TouchableOpacity>
           </ThemedView>
         </ThemedView>
       </ThemedView>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {state.loading && (
+          <ThemedView style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#FF6B35" />
+            <ThemedText style={styles.loadingText}>
+              {state.isOnline ? "Syncing with server..." : "Loading habits..."}
+            </ThemedText>
+          </ThemedView>
+        )}
         {debugInfo && (
           <ThemedView style={styles.debugContainer}>
             <ThemedText style={styles.debugText}>Debug: {debugInfo}</ThemedText>
@@ -214,9 +296,27 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
   },
+  statusRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  connectionStatus: {
+    fontSize: 12,
+    opacity: 0.8,
+  },
+  errorText: {
+    fontSize: 12,
+    color: "#dc3545",
+    marginTop: 4,
+  },
   buttonGroup: {
     flexDirection: "row",
     gap: 8,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   resetButton: {
     backgroundColor: "#FF6B35",
@@ -241,6 +341,52 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 10,
     fontWeight: "600",
+  },
+  refreshButton: {
+    backgroundColor: "#28a745",
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  refreshButtonText: {
+    color: "white",
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  testButton: {
+    backgroundColor: "#6f42c1",
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  testButtonText: {
+    color: "white",
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  manualResetButton: {
+    backgroundColor: "#fd7e14",
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  manualResetButtonText: {
+    color: "white",
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  loadingContainer: {
+    alignItems: "center",
+    padding: 20,
+    backgroundColor: "transparent",
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 14,
+    opacity: 0.7,
   },
   debugContainer: {
     backgroundColor: "#f0f0f0",

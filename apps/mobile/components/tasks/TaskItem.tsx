@@ -121,7 +121,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
                 ]}
                 onPress={handleEdit}
               >
-                {getCategoryIcon(task.category)} {task.text}
+                {`${getCategoryIcon(task.category)}${getCategoryIcon(task.category) ? " " : ""}${task.text}`}
               </ThemedText>
               {task.isFoundational && (
                 <ThemedText style={styles.foundationalBadge}>Daily</ThemedText>
