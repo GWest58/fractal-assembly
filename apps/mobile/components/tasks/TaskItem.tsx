@@ -19,6 +19,21 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
     toggleTask(task.id);
   };
 
+  const getCategoryIcon = (category?: string) => {
+    switch (category) {
+      case "health":
+        return "💊";
+      case "wellness":
+        return "🧘";
+      case "productivity":
+        return "📋";
+      case "personal":
+        return "🛏️";
+      default:
+        return "";
+    }
+  };
+
   const handleEdit = () => {
     setIsEditing(true);
     setEditText(task.text);
@@ -49,18 +64,26 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
     setShowDeleteConfirm(false);
   };
 
+  const isCompleted = task.isFoundational
+    ? task.completedToday
+    : task.completed;
+
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView
+      style={[
+        styles.container,
+        task.isFoundational && styles.foundationalContainer,
+      ]}
+    >
       <TouchableOpacity onPress={handleToggle} style={styles.checkbox}>
         <ThemedView
           style={[
             styles.checkboxInner,
-            task.completed && styles.checkboxChecked,
+            isCompleted && styles.checkboxChecked,
+            task.isFoundational && styles.foundationalCheckbox,
           ]}
         >
-          {task.completed && (
-            <ThemedText style={styles.checkmark}>✓</ThemedText>
-          )}
+          {isCompleted && <ThemedText style={styles.checkmark}>✓</ThemedText>}
         </ThemedView>
       </TouchableOpacity>
 
@@ -89,12 +112,21 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
           </View>
         ) : (
           <View style={styles.displayContainer}>
-            <ThemedText
-              style={[styles.taskText, task.completed && styles.completedText]}
-              onPress={handleEdit}
-            >
-              {task.text}
-            </ThemedText>
+            <View style={styles.taskHeader}>
+              <ThemedText
+                style={[
+                  styles.taskText,
+                  isCompleted && styles.completedText,
+                  task.isFoundational && styles.foundationalText,
+                ]}
+                onPress={handleEdit}
+              >
+                {getCategoryIcon(task.category)} {task.text}
+              </ThemedText>
+              {task.isFoundational && (
+                <ThemedText style={styles.foundationalBadge}>Daily</ThemedText>
+              )}
+            </View>
             {showDeleteConfirm ? (
               <View style={styles.deleteConfirmContainer}>
                 <ThemedText style={styles.deleteConfirmText}>
@@ -116,20 +148,22 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
                 </View>
               </View>
             ) : (
-              <View style={styles.actions}>
-                <TouchableOpacity
-                  onPress={handleEdit}
-                  style={styles.editButton}
-                >
-                  <ThemedText style={styles.actionText}>Edit</ThemedText>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={handleDelete}
-                  style={styles.deleteButton}
-                >
-                  <ThemedText style={styles.actionText}>Delete</ThemedText>
-                </TouchableOpacity>
-              </View>
+              !task.isFoundational && (
+                <View style={styles.actions}>
+                  <TouchableOpacity
+                    onPress={handleEdit}
+                    style={styles.editButton}
+                  >
+                    <ThemedText style={styles.actionText}>Edit</ThemedText>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleDelete}
+                    style={styles.deleteButton}
+                  >
+                    <ThemedText style={styles.actionText}>Delete</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              )
             )}
           </View>
         )}
@@ -147,6 +181,11 @@ const styles = StyleSheet.create({
     borderBottomColor: "#e1e1e1",
     backgroundColor: "transparent",
   },
+  foundationalContainer: {
+    backgroundColor: "#FFF8F0",
+    borderLeftWidth: 4,
+    borderLeftColor: "#FF6B35",
+  },
   checkbox: {
     marginRight: 12,
     marginTop: 2,
@@ -160,6 +199,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "transparent",
+  },
+  foundationalCheckbox: {
+    borderColor: "#FF6B35",
   },
   checkboxChecked: {
     backgroundColor: "#007AFF",
@@ -175,10 +217,29 @@ const styles = StyleSheet.create({
   displayContainer: {
     flex: 1,
   },
+  taskHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 8,
+  },
   taskText: {
     fontSize: 16,
     lineHeight: 22,
-    marginBottom: 8,
+    flex: 1,
+  },
+  foundationalText: {
+    fontWeight: "600",
+  },
+  foundationalBadge: {
+    backgroundColor: "#FF6B35",
+    color: "white",
+    fontSize: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    fontWeight: "600",
+    marginLeft: 8,
   },
   completedText: {
     textDecorationLine: "line-through",

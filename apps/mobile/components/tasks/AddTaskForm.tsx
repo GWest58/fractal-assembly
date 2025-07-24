@@ -5,6 +5,7 @@ import {
   TextInput,
   TouchableOpacity,
   Modal,
+  Switch,
 } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -23,6 +24,10 @@ export const AddTaskForm: React.FC<AddTaskFormProps> = ({
 }) => {
   const { addTask } = useTask();
   const [taskText, setTaskText] = useState("");
+  const [isFoundational, setIsFoundational] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<
+    "health" | "wellness" | "productivity" | "personal" | undefined
+  >(undefined);
 
   // Theme colors
   const backgroundColor = useThemeColor(
@@ -50,8 +55,14 @@ export const AddTaskForm: React.FC<AddTaskFormProps> = ({
 
   const handleSubmit = () => {
     if (taskText.trim()) {
-      addTask({ text: taskText.trim() });
+      addTask({
+        text: taskText.trim(),
+        isFoundational,
+        category: selectedCategory,
+      });
       setTaskText("");
+      setIsFoundational(false);
+      setSelectedCategory(undefined);
       onClose();
     }
   };
@@ -98,6 +109,72 @@ export const AddTaskForm: React.FC<AddTaskFormProps> = ({
             autoFocus
           />
 
+          <View style={styles.optionsContainer}>
+            <View
+              style={[styles.switchContainer, { borderColor: borderColor }]}
+            >
+              <ThemedText style={styles.switchLabel}>
+                Foundational Habit
+              </ThemedText>
+              <Switch
+                value={isFoundational}
+                onValueChange={setIsFoundational}
+                trackColor={{ false: "#767577", true: "#FF6B35" }}
+                thumbColor={isFoundational ? "#fff" : "#f4f3f4"}
+              />
+            </View>
+
+            {isFoundational && (
+              <View style={styles.categoryContainer}>
+                <ThemedText style={styles.categoryLabel}>Category:</ThemedText>
+                <View style={styles.categoryButtons}>
+                  {(
+                    [
+                      { key: "health", label: "💊 Health", color: "#FF6B6B" },
+                      {
+                        key: "wellness",
+                        label: "🧘 Wellness",
+                        color: "#4ECDC4",
+                      },
+                      {
+                        key: "productivity",
+                        label: "📋 Productivity",
+                        color: "#45B7D1",
+                      },
+                      {
+                        key: "personal",
+                        label: "🛏️ Personal",
+                        color: "#96CEB4",
+                      },
+                    ] as const
+                  ).map((category) => (
+                    <TouchableOpacity
+                      key={category.key}
+                      style={[
+                        styles.categoryButton,
+                        selectedCategory === category.key && {
+                          backgroundColor: category.color,
+                        },
+                      ]}
+                      onPress={() => setSelectedCategory(category.key)}
+                    >
+                      <Text
+                        style={[
+                          styles.categoryButtonText,
+                          selectedCategory === category.key && {
+                            color: "white",
+                          },
+                        ]}
+                      >
+                        {category.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+
           <View style={styles.buttonContainer}>
             <TouchableOpacity
               onPress={handleSubmit}
@@ -105,9 +182,13 @@ export const AddTaskForm: React.FC<AddTaskFormProps> = ({
                 styles.addButton,
                 !taskText.trim() && styles.addButtonDisabled,
               ]}
-              disabled={!taskText.trim()}
+              disabled={
+                !taskText.trim() || (isFoundational && !selectedCategory)
+              }
             >
-              <Text style={styles.addButtonText}>Add Task</Text>
+              <Text style={styles.addButtonText}>
+                {isFoundational ? "Add Foundational Habit" : "Add Task"}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -212,5 +293,47 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     fontSize: 17,
     fontWeight: "600",
+  },
+  optionsContainer: {
+    marginBottom: 24,
+  },
+  switchContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    borderWidth: 1,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  switchLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  categoryContainer: {
+    marginBottom: 16,
+  },
+  categoryLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 12,
+  },
+  categoryButtons: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  categoryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#e1e1e1",
+    backgroundColor: "#f9f9f9",
+  },
+  categoryButtonText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#333",
   },
 });
