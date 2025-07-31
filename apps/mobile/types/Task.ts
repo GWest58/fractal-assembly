@@ -30,6 +30,8 @@ export interface TaskFrequency {
   time?: string; // HH:MM format
 }
 
+export type TimerStatus = "not_started" | "running" | "paused" | "completed";
+
 export interface Task {
   id: string;
   text: string;
@@ -39,11 +41,25 @@ export interface Task {
   completedToday?: boolean;
   lastCompletedDate?: Date;
   frequency?: TaskFrequency;
+  durationSeconds?: number;
+  timerStartedAt?: string;
+  timerStatus?: TimerStatus;
+}
+
+export interface TimerStatusResponse {
+  taskId: string;
+  status: TimerStatus;
+  durationSeconds?: number;
+  startedAt?: string;
+  elapsed: number;
+  remainingSeconds?: number;
+  isExpired: boolean;
 }
 
 export type CreateTaskInput = {
   text: string;
   frequency?: TaskFrequency;
+  durationSeconds?: number;
 };
 
 export type UpdateTaskInput = {
@@ -53,4 +69,7 @@ export type UpdateTaskInput = {
   completedToday?: boolean;
   lastCompletedDate?: Date;
   frequency?: TaskFrequency;
+  durationSeconds?: number;
+  timerStartedAt?: string;
+  timerStatus?: TimerStatus;
 };

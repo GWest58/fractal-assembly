@@ -5,7 +5,7 @@ import { ThemedView } from "@/components/ThemedView";
 import { useTask } from "@/contexts/TaskContext";
 import { TaskItem } from "./TaskItem";
 
-export const TaskList: React.FC = () => {
+export const TaskList: React.FC = React.memo(() => {
   const { state } = useTask();
   const { tasks } = state;
 
@@ -94,7 +94,9 @@ export const TaskList: React.FC = () => {
       <ThemedView style={styles.bottomSpacer} />
     </ThemedView>
   );
-};
+});
+
+TaskList.displayName = "TaskList";
 
 const styles = StyleSheet.create({
   container: {

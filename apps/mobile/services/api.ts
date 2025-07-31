@@ -36,6 +36,9 @@ export interface Task {
     data: Record<string, unknown>;
     time?: string;
   };
+  durationSeconds?: number;
+  timerStartedAt?: string;
+  timerStatus?: string;
 }
 
 export interface TaskCompletion {
@@ -124,6 +127,7 @@ class ApiClient {
       data: Record<string, unknown>;
       time?: string;
     };
+    durationSeconds?: number;
   }): Promise<Task> {
     const response = await this.request<ApiResponse<Task>>("/tasks", {
       method: "POST",
@@ -145,6 +149,9 @@ class ApiClient {
         data: Record<string, unknown>;
         time?: string;
       };
+      durationSeconds?: number;
+      timerStartedAt?: string;
+      timerStatus?: string;
     },
   ): Promise<Task> {
     const response = await this.request<ApiResponse<Task>>(`/tasks/${id}`, {
@@ -355,7 +362,7 @@ export const debugApi = {
 
 // Make debug functions available globally in development
 if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
-  (window as Record<string, unknown>).debugApi = debugApi;
-  (window as Record<string, unknown>).apiClient = apiClient;
+  (window as any).debugApi = debugApi;
+  (window as any).apiClient = apiClient;
   console.log("🛠️ Debug tools available: window.debugApi, window.apiClient");
 }

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, memo } from "react";
 import {
   StyleSheet,
   View,
@@ -13,6 +13,9 @@ import { useTask } from "@/contexts/TaskContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { Colors, TaskColors } from "@/constants/Colors";
 import { Spacing, BorderRadius, Typography } from "@/constants/DesignTokens";
+import { InlineTimer } from "../InlineTimer";
+import { TimerStatusResponse } from "@/types/Task";
+import { TimerService } from "../../services/timerService";
 
 import { Task } from "@/types/Task";
 
@@ -20,12 +23,13 @@ interface TaskItemProps {
   task: Task;
 }
 
-export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
+export const TaskItem: React.FC<TaskItemProps> = memo(({ task }) => {
   const { updateTask, deleteTask, toggleTask } = useTask();
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(task.text);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [scaleAnim] = useState(new Animated.Value(1));
+  const [opacityAnim] = useState(new Animated.Value(1));
 
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? "light"];
@@ -78,21 +82,55 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
   };
 
   const handleToggle = () => {
-    // Scale animation for tactile feedback
-    Animated.sequence([
-      Animated.timing(scaleAnim, {
-        toValue: 0.95,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
+    // Immediate optimistic feedback - but lighter to prevent white flash
+    Animated.parallel([
+      // Scale animation for tactile feedback
+      Animated.sequence([
+        Animated.timing(scaleAnim, {
+          toValue: 0.98,
+          duration: 60,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 60,
+          useNativeDriver: true,
+        }),
+      ]),
+      // Subtle opacity change to prevent white flash
+      Animated.sequence([
+        Animated.timing(opacityAnim, {
+          toValue: 0.85,
+          duration: 80,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 80,
+          useNativeDriver: true,
+        }),
+      ]),
     ]).start();
 
+    // Call toggle function
     toggleTask(task.id);
+  };
+
+  const handleTimerComplete = async () => {
+    // Auto-complete the task when timer finishes
+    if (!isCompleted) {
+      try {
+        await toggleTask(task.id);
+        // Don't call refreshTasks here as toggleTask already updates the state
+      } catch (error) {
+        console.error("Failed to complete task after timer finished:", error);
+      }
+    }
+  };
+
+  const handleTimerUpdate = (_status: TimerStatusResponse) => {
+    // Handle timer status updates - but don't auto-complete here
+    // Let the timer component handle completion to avoid double state updates
   };
 
   const handleEdit = () => {
@@ -117,8 +155,15 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
   };
 
   const confirmDelete = () => {
-    deleteTask(task.id);
-    setShowDeleteConfirm(false);
+    // Animate fade out before deleting
+    Animated.timing(opacityAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      deleteTask(task.id);
+      setShowDeleteConfirm(false);
+    });
   };
 
   const cancelDelete = () => {
@@ -224,15 +269,34 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
               </Body>
             </TouchableOpacity>
 
-            {task.frequency && (
+            {(task.frequency ||
+              (task.durationSeconds && task.durationSeconds > 0)) && (
               <Caption1 hierarchy="secondary" style={styles.frequencyDetail}>
-                {getDetailedFrequencyText()}
+                {task.frequency && getDetailedFrequencyText()}
+                {task.frequency &&
+                  task.durationSeconds &&
+                  task.durationSeconds > 0 &&
+                  " • "}
+                {task.durationSeconds &&
+                  task.durationSeconds > 0 &&
+                  `⏱ ${TimerService.formatTime(task.durationSeconds)}`}
               </Caption1>
             )}
           </View>
 
           {renderFrequencyBadge()}
         </View>
+
+        {/* Inline Timer Section - Show if task has duration and is not completed */}
+        {task.durationSeconds && task.durationSeconds > 0 && !isCompleted && (
+          <InlineTimer
+            taskId={task.id}
+            durationSeconds={task.durationSeconds}
+            timerStatus={task.timerStatus}
+            onTimerComplete={handleTimerComplete}
+            onTimerUpdate={handleTimerUpdate}
+          />
+        )}
 
         {showDeleteConfirm ? (
           <View
@@ -296,20 +360,24 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
   };
 
   return (
-    <View
+    <Animated.View
       style={[
         styles.container,
         {
-          backgroundColor: colors.background,
-          borderBottomColor: colors.separator,
+          backgroundColor: colors.backgroundSecondary,
+          borderColor: colors.border,
+          opacity: opacityAnim,
+          transform: [{ scale: scaleAnim }],
         },
       ]}
     >
       {renderCheckbox()}
       {renderTaskContent()}
-    </View>
+    </Animated.View>
   );
-};
+});
+
+TaskItem.displayName = "TaskItem";
 
 const styles = StyleSheet.create({
   container: {
