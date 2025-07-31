@@ -3,6 +3,8 @@ import { StyleSheet, View, TouchableOpacity, TextInput } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useTask } from "@/contexts/TaskContext";
+import { useThemeColor } from "@/hooks/useThemeColor";
+
 import { Task } from "@/types/Task";
 
 interface TaskItemProps {
@@ -15,20 +17,62 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
   const [editText, setEditText] = useState(task.text);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  // Theme colors
+  const inputTextColor = useThemeColor({ light: "#000", dark: "#fff" }, "text");
+  const deleteConfirmBg = useThemeColor(
+    { light: "#fff3cd", dark: "#3a3a2a" },
+    "background",
+  );
+  const deleteConfirmBorder = useThemeColor(
+    { light: "#ffeaa7", dark: "#666" },
+    "text",
+  );
+  const deleteConfirmText = useThemeColor(
+    { light: "#856404", dark: "#d4c069" },
+    "text",
+  );
+
   const handleToggle = () => {
     toggleTask(task.id);
   };
 
-  const getCategoryIcon = (category?: string) => {
-    switch (category) {
-      case "health":
-        return "💊";
-      case "wellness":
-        return "🧘";
-      case "productivity":
-        return "📋";
-      case "personal":
-        return "🛏️";
+  const getFrequencyDisplayText = () => {
+    if (!task.frequency) return "Daily";
+
+    switch (task.frequency.type) {
+      case "daily":
+        return "Daily";
+      case "specific_days":
+        return "Custom";
+      case "times_per_week":
+        return `${task.frequency.data.count || 3}x/week`;
+      case "times_per_month":
+        return `${task.frequency.data.count || 3}x/month`;
+      default:
+        return "Daily";
+    }
+  };
+
+  const getDetailedFrequencyText = () => {
+    if (!task.frequency) return "";
+
+    switch (task.frequency.type) {
+      case "daily":
+        return task.frequency.time ? `Every day at ${task.frequency.time}` : "";
+      case "specific_days":
+        const days = task.frequency.data.days?.join(", ") || "";
+        const timeStr = task.frequency.time ? ` at ${task.frequency.time}` : "";
+        return `${days}${timeStr}`;
+      case "times_per_week":
+        const weekTimeStr = task.frequency.time
+          ? ` at ${task.frequency.time}`
+          : "";
+        return `${task.frequency.data.count || 3} times per week${weekTimeStr}`;
+      case "times_per_month":
+        const monthTimeStr = task.frequency.time
+          ? ` at ${task.frequency.time}`
+          : "";
+        return `${task.frequency.data.count || 3} times per month${monthTimeStr}`;
       default:
         return "";
     }
@@ -64,24 +108,13 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
     setShowDeleteConfirm(false);
   };
 
-  const isCompleted = task.isFoundational
-    ? task.completedToday
-    : task.completed;
+  const isCompleted = task.frequency ? task.completedToday : task.completed;
 
   return (
-    <ThemedView
-      style={[
-        styles.container,
-        task.isFoundational && styles.foundationalContainer,
-      ]}
-    >
+    <ThemedView style={[styles.container, { borderBottomColor: borderColor }]}>
       <TouchableOpacity onPress={handleToggle} style={styles.checkbox}>
         <ThemedView
-          style={[
-            styles.checkboxInner,
-            isCompleted && styles.checkboxChecked,
-            task.isFoundational && styles.foundationalCheckbox,
-          ]}
+          style={[styles.checkboxInner, isCompleted && styles.checkboxChecked]}
         >
           {isCompleted && <ThemedText style={styles.checkmark}>✓</ThemedText>}
         </ThemedView>
@@ -91,7 +124,14 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
         {isEditing ? (
           <View style={styles.editContainer}>
             <TextInput
-              style={styles.textInput}
+              style={[
+                styles.textInput,
+                {
+                  borderColor: borderColor,
+                  backgroundColor: inputBackgroundColor,
+                  color: inputTextColor,
+                },
+              ]}
               value={editText}
               onChangeText={setEditText}
               onSubmitEditing={handleSave}
@@ -114,22 +154,38 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
           <View style={styles.displayContainer}>
             <View style={styles.taskHeader}>
               <ThemedText
-                style={[
-                  styles.taskText,
-                  isCompleted && styles.completedText,
-                  task.isFoundational && styles.foundationalText,
-                ]}
+                style={[styles.taskText, isCompleted && styles.completedText]}
                 onPress={handleEdit}
               >
-                {`${getCategoryIcon(task.category)}${getCategoryIcon(task.category) ? " " : ""}${task.text}`}
+                {task.text}
               </ThemedText>
-              {task.isFoundational && (
-                <ThemedText style={styles.foundationalBadge}>Daily</ThemedText>
+              {task.frequency && (
+                <ThemedText style={styles.frequencyBadge}>
+                  {getFrequencyDisplayText()}
+                </ThemedText>
               )}
             </View>
+            {task.frequency && (
+              <ThemedText style={styles.frequencyText}>
+                {getDetailedFrequencyText()}
+              </ThemedText>
+            )}
             {showDeleteConfirm ? (
-              <View style={styles.deleteConfirmContainer}>
-                <ThemedText style={styles.deleteConfirmText}>
+              <View
+                style={[
+                  styles.deleteConfirmContainer,
+                  {
+                    backgroundColor: deleteConfirmBg,
+                    borderColor: deleteConfirmBorder,
+                  },
+                ]}
+              >
+                <ThemedText
+                  style={[
+                    styles.deleteConfirmText,
+                    { color: deleteConfirmText },
+                  ]}
+                >
                   Delete this task?
                 </ThemedText>
                 <View style={styles.deleteConfirmButtons}>
@@ -148,22 +204,20 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
                 </View>
               </View>
             ) : (
-              !task.isFoundational && (
-                <View style={styles.actions}>
-                  <TouchableOpacity
-                    onPress={handleEdit}
-                    style={styles.editButton}
-                  >
-                    <ThemedText style={styles.actionText}>Edit</ThemedText>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={handleDelete}
-                    style={styles.deleteButton}
-                  >
-                    <ThemedText style={styles.actionText}>Delete</ThemedText>
-                  </TouchableOpacity>
-                </View>
-              )
+              <View style={styles.actions}>
+                <TouchableOpacity
+                  onPress={handleEdit}
+                  style={styles.editButton}
+                >
+                  <ThemedText style={styles.actionText}>Edit</ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleDelete}
+                  style={styles.deleteButton}
+                >
+                  <ThemedText style={styles.actionText}>Delete</ThemedText>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         )}
@@ -178,13 +232,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#e1e1e1",
     backgroundColor: "transparent",
-  },
-  foundationalContainer: {
-    backgroundColor: "#FFF8F0",
-    borderLeftWidth: 4,
-    borderLeftColor: "#FF6B35",
   },
   checkbox: {
     marginRight: 12,
@@ -200,9 +248,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "transparent",
   },
-  foundationalCheckbox: {
-    borderColor: "#FF6B35",
-  },
+
   checkboxChecked: {
     backgroundColor: "#007AFF",
   },
@@ -228,12 +274,9 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     flex: 1,
   },
-  foundationalText: {
-    fontWeight: "600",
-  },
-  foundationalBadge: {
-    backgroundColor: "#FF6B35",
-    color: "white",
+  frequencyBadge: {
+    backgroundColor: "#007AFF",
+    color: "#ffffff",
     fontSize: 10,
     paddingHorizontal: 8,
     paddingVertical: 2,
@@ -243,7 +286,7 @@ const styles = StyleSheet.create({
   },
   completedText: {
     textDecorationLine: "line-through",
-    opacity: 0.6,
+    opacity: 0.7,
   },
   actions: {
     flexDirection: "row",
@@ -268,14 +311,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
     borderWidth: 1,
-    borderColor: "#ccc",
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,
     minHeight: 80,
     textAlignVertical: "top",
-    backgroundColor: "#fff",
-    color: "#000",
   },
   editButtons: {
     flexDirection: "row",
@@ -294,23 +334,20 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   buttonText: {
-    color: "white",
+    color: "#ffffff",
     fontSize: 14,
     fontWeight: "600",
   },
   deleteConfirmContainer: {
-    backgroundColor: "#fff3cd",
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#ffeaa7",
     marginTop: 8,
   },
   deleteConfirmText: {
     fontSize: 14,
     marginBottom: 12,
     textAlign: "center",
-    color: "#856404",
   },
   deleteConfirmButtons: {
     flexDirection: "row",
@@ -328,5 +365,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 6,
+  },
+  frequencyText: {
+    fontSize: 12,
+    opacity: 0.8,
+    marginTop: 4,
+    fontStyle: "italic",
   },
 });

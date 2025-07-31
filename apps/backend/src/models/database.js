@@ -5,7 +5,7 @@ import { dirname, join } from "path";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const dbPath = join(__dirname, "../../data/habits.db");
+const dbPath = join(__dirname, "../../data/tasks.db");
 
 class DatabaseConnection {
   constructor() {

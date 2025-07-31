@@ -9,27 +9,25 @@ export const TaskList: React.FC = () => {
   const { state } = useTask();
   const { tasks } = state;
 
-  const foundationalHabits = tasks.filter((task) => task.isFoundational);
-  const regularTasks = tasks.filter((task) => !task.isFoundational);
+  const recurringTasks = tasks.filter((task) => task.frequency);
+  const oneTimeTasks = tasks.filter((task) => !task.frequency);
 
-  const completedFoundationalToday = foundationalHabits.filter(
+  const completedRecurringToday = recurringTasks.filter(
     (task) => task.completedToday,
   );
-  const pendingFoundational = foundationalHabits.filter(
+  const pendingRecurring = recurringTasks.filter(
     (task) => !task.completedToday,
   );
 
-  const completedRegularTasks = regularTasks.filter((task) => task.completed);
-  const pendingRegularTasks = regularTasks.filter((task) => !task.completed);
+  const completedOneTime = oneTimeTasks.filter((task) => task.completed);
+  const pendingOneTime = oneTimeTasks.filter((task) => !task.completed);
 
   if (tasks.length === 0) {
     return (
       <ThemedView style={styles.emptyContainer}>
-        <ThemedText style={styles.emptyText}>
-          Setting up your habits...
-        </ThemedText>
+        <ThemedText style={styles.emptyText}>No tasks yet</ThemedText>
         <ThemedText style={styles.emptySubtext}>
-          Your foundational habits will appear here shortly.
+          Add your first task to get started!
         </ThemedText>
       </ThemedView>
     );
@@ -37,52 +35,51 @@ export const TaskList: React.FC = () => {
 
   return (
     <ThemedView style={styles.container}>
-      {/* Foundational Habits Section */}
-      <ThemedView style={styles.section}>
-        <ThemedText type="subtitle" style={styles.foundationalTitle}>
-          🌟 Foundational Habits ({completedFoundationalToday.length}/
-          {foundationalHabits.length})
-        </ThemedText>
-        <ThemedText style={styles.foundationalSubtitle}>
-          Your daily minimum viable habits
-        </ThemedText>
+      {/* Recurring Tasks Section */}
+      {recurringTasks.length > 0 && (
+        <ThemedView style={styles.section}>
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            📅 Recurring Tasks ({completedRecurringToday.length}/
+            {recurringTasks.length})
+          </ThemedText>
 
-        {pendingFoundational.map((task) => (
-          <TaskItem key={task.id} task={task} />
-        ))}
+          {pendingRecurring.map((task) => (
+            <TaskItem key={task.id} task={task} />
+          ))}
 
-        {completedFoundationalToday.length > 0 && (
-          <>
-            <ThemedText style={styles.completedLabel}>
-              ✅ Completed Today
-            </ThemedText>
-            {completedFoundationalToday.map((task) => (
-              <TaskItem key={task.id} task={task} />
-            ))}
-          </>
-        )}
-      </ThemedView>
+          {completedRecurringToday.length > 0 && (
+            <>
+              <ThemedText style={styles.completedLabel}>
+                ✅ Completed Today
+              </ThemedText>
+              {completedRecurringToday.map((task) => (
+                <TaskItem key={task.id} task={task} />
+              ))}
+            </>
+          )}
+        </ThemedView>
+      )}
 
-      {/* Regular Tasks Section */}
-      {regularTasks.length > 0 && (
+      {/* One-time Tasks Section */}
+      {oneTimeTasks.length > 0 && (
         <>
-          {pendingRegularTasks.length > 0 && (
+          {pendingOneTime.length > 0 && (
             <ThemedView style={styles.section}>
               <ThemedText type="subtitle" style={styles.sectionTitle}>
-                Other Tasks ({pendingRegularTasks.length})
+                📝 One-time Tasks ({pendingOneTime.length})
               </ThemedText>
-              {pendingRegularTasks.map((task) => (
+              {pendingOneTime.map((task) => (
                 <TaskItem key={task.id} task={task} />
               ))}
             </ThemedView>
           )}
 
-          {completedRegularTasks.length > 0 && (
+          {completedOneTime.length > 0 && (
             <ThemedView style={styles.section}>
               <ThemedText type="subtitle" style={styles.sectionTitle}>
-                Completed Tasks ({completedRegularTasks.length})
+                ✅ Completed Tasks ({completedOneTime.length})
               </ThemedText>
-              {completedRegularTasks.map((task) => (
+              {completedOneTime.map((task) => (
                 <TaskItem key={task.id} task={task} />
               ))}
             </ThemedView>
@@ -91,16 +88,21 @@ export const TaskList: React.FC = () => {
       )}
 
       <ThemedView style={styles.stats}>
-        <ThemedText style={styles.statsText}>
-          Daily Progress: {completedFoundationalToday.length}/
-          {foundationalHabits.length} foundational habits
-        </ThemedText>
-        {regularTasks.length > 0 && (
+        {recurringTasks.length > 0 && (
           <ThemedText style={styles.statsText}>
-            {`Other: ${completedRegularTasks.length}/${regularTasks.length} completed`}
+            Today: {completedRecurringToday.length}/{recurringTasks.length}{" "}
+            recurring tasks
+          </ThemedText>
+        )}
+        {oneTimeTasks.length > 0 && (
+          <ThemedText style={styles.statsText}>
+            {`One-time: ${completedOneTime.length}/${oneTimeTasks.length} completed`}
           </ThemedText>
         )}
       </ThemedView>
+
+      {/* Bottom spacer to prevent FAB overlap */}
+      <ThemedView style={styles.bottomSpacer} />
     </ThemedView>
   );
 };
@@ -114,23 +116,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     backgroundColor: "transparent",
   },
-  foundationalTitle: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#FF6B35",
-    marginBottom: 4,
-    borderRadius: 8,
-    color: "white",
-    fontWeight: "700",
-    fontSize: 16,
-  },
-  foundationalSubtitle: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-    fontSize: 12,
-    opacity: 0.7,
-    fontStyle: "italic",
-  },
+
   sectionTitle: {
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -177,5 +163,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
     opacity: 0.7,
     marginBottom: 2,
+  },
+  bottomSpacer: {
+    height: 40,
+    backgroundColor: "transparent",
   },
 });

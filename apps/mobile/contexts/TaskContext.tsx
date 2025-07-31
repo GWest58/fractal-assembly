@@ -5,12 +5,7 @@ import React, {
   ReactNode,
   useEffect,
 } from "react";
-import {
-  Task,
-  CreateTaskInput,
-  UpdateTaskInput,
-  FOUNDATIONAL_HABITS,
-} from "@/types/Task";
+import { Task, CreateTaskInput, UpdateTaskInput } from "@/types/Task";
 import { apiClient, checkApiConnection } from "@/services/api";
 
 interface TaskState {
@@ -29,7 +24,7 @@ type TaskAction =
   | { type: "UPDATE_TASK"; payload: Task }
   | { type: "DELETE_TASK"; payload: string }
   | { type: "TOGGLE_TASK_LOCAL"; payload: string }
-  | { type: "RESET_DAILY_HABITS_LOCAL" };
+  | { type: "RESET_DAILY_TASKS_LOCAL" };
 
 interface TaskContextType {
   state: TaskState;
@@ -37,8 +32,8 @@ interface TaskContextType {
   updateTask: (input: UpdateTaskInput) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   toggleTask: (id: string) => Promise<void>;
-  initFoundationalHabits: () => Promise<void>;
-  resetDailyHabits: () => Promise<void>;
+  initFoundationalTasks: () => Promise<void>;
+  resetDailyTasks: () => Promise<void>;
   refreshTasks: () => Promise<void>;
 }
 
@@ -92,11 +87,11 @@ const taskReducer = (state: TaskState, action: TaskAction): TaskState => {
             ? {
                 ...task,
                 completed: !task.completed,
-                completedToday: task.isFoundational
+                completedToday: task.frequency
                   ? !task.completedToday
                   : !task.completed,
                 lastCompletedDate:
-                  task.isFoundational && !task.completedToday
+                  task.frequency && !task.completedToday
                     ? new Date()
                     : task.lastCompletedDate,
                 updatedAt: new Date(),
@@ -105,11 +100,11 @@ const taskReducer = (state: TaskState, action: TaskAction): TaskState => {
         ),
       };
 
-    case "RESET_DAILY_HABITS_LOCAL":
+    case "RESET_DAILY_TASKS_LOCAL":
       return {
         ...state,
         tasks: state.tasks.map((task) =>
-          task.isFoundational
+          task.frequency
             ? { ...task, completedToday: false, updatedAt: new Date() }
             : task,
         ),
@@ -132,18 +127,29 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     isOnline: false,
   });
 
-  // Convert API habit to Task interface
-  const convertApiHabitToTask = (habit: any): Task => ({
-    id: habit.id,
-    text: habit.text,
-    completed: habit.completedToday || false,
-    completedToday: habit.completedToday || false,
-    isFoundational: habit.isFoundational,
-    category: habit.category,
-    createdAt: new Date(habit.createdAt),
-    updatedAt: new Date(habit.updatedAt),
-    lastCompletedDate: habit.lastCompletedAt
-      ? new Date(habit.lastCompletedAt)
+  // Convert API task to Task interface
+  const convertApiTaskToTask = (apiTask: {
+    id: string;
+    text: string;
+    completedToday?: boolean;
+    frequency?: {
+      type: string;
+      data: Record<string, unknown>;
+      time?: string;
+    };
+    createdAt: string;
+    updatedAt: string;
+    lastCompletedAt?: string;
+  }): Task => ({
+    id: apiTask.id,
+    text: apiTask.text,
+    completed: apiTask.completedToday || false,
+    completedToday: apiTask.completedToday || false,
+    frequency: apiTask.frequency,
+    createdAt: new Date(apiTask.createdAt),
+    updatedAt: new Date(apiTask.updatedAt),
+    lastCompletedDate: apiTask.lastCompletedAt
+      ? new Date(apiTask.lastCompletedAt)
       : undefined,
   });
 
@@ -168,23 +174,13 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
 
       const isOnline = await checkConnection();
       if (!isOnline) {
-        // Fallback to local foundational habits if offline
-        const localTasks: Task[] = FOUNDATIONAL_HABITS.map((habit, index) => ({
-          id: `foundational-${index}`,
-          text: habit.text,
-          completed: false,
-          completedToday: false,
-          isFoundational: true,
-          category: habit.category,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }));
-        dispatch({ type: "SET_TASKS", payload: localTasks });
+        // No tasks available offline
+        dispatch({ type: "SET_TASKS", payload: [] });
         return;
       }
 
-      const habits = await apiClient.getHabits();
-      const tasks = habits.map(convertApiHabitToTask);
+      const apiTasks = await apiClient.getTasks();
+      const tasks = apiTasks.map(convertApiTaskToTask);
       dispatch({ type: "SET_TASKS", payload: tasks });
     } catch (error) {
       console.error("Failed to load tasks:", error);
@@ -194,18 +190,8 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
           error instanceof Error ? error.message : "Failed to load tasks",
       });
 
-      // Fallback to local foundational habits on error
-      const localTasks: Task[] = FOUNDATIONAL_HABITS.map((habit, index) => ({
-        id: `foundational-${index}`,
-        text: habit.text,
-        completed: false,
-        completedToday: false,
-        isFoundational: true,
-        category: habit.category,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
-      dispatch({ type: "SET_TASKS", payload: localTasks });
+      // No tasks available on error
+      dispatch({ type: "SET_TASKS", payload: [] });
     }
   };
 
@@ -226,8 +212,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
           text: input.text,
           completed: false,
           completedToday: false,
-          isFoundational: input.isFoundational || false,
-          category: input.category,
+          frequency: input.frequency,
           createdAt: new Date(),
           updatedAt: new Date(),
         };
@@ -235,13 +220,12 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         return;
       }
 
-      const habit = await apiClient.createHabit({
+      const apiTask = await apiClient.createTask({
         text: input.text,
-        category: input.category || "personal",
-        isFoundational: input.isFoundational,
+        frequency: input.frequency,
       });
 
-      const newTask = convertApiHabitToTask(habit);
+      const newTask = convertApiTaskToTask(apiTask);
       dispatch({ type: "ADD_TASK", payload: newTask });
     } catch (error) {
       console.error("Failed to add task:", error);
@@ -280,12 +264,12 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         return;
       }
 
-      const habit = await apiClient.updateHabit(input.id, {
+      const apiTask = await apiClient.updateTask(input.id, {
         text: input.text,
-        category: input.category,
+        frequency: input.frequency,
       });
 
-      const updatedTask = convertApiHabitToTask(habit);
+      const updatedTask = convertApiTaskToTask(apiTask);
       dispatch({ type: "UPDATE_TASK", payload: updatedTask });
     } catch (error) {
       console.error("Failed to update task:", error);
@@ -308,7 +292,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         return;
       }
 
-      await apiClient.deleteHabit(id);
+      await apiClient.deleteTask(id);
       dispatch({ type: "DELETE_TASK", payload: id });
     } catch (error) {
       console.error("Failed to delete task:", error);
@@ -333,22 +317,22 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         return;
       }
 
-      // If it's a foundational habit, use completion API
-      if (task.isFoundational) {
+      // If it's a recurring task, use completion API
+      if (task.frequency) {
         if (task.completedToday) {
           // Mark as incomplete
-          await apiClient.markHabitIncomplete(id);
-          console.log(`Habit ${task.text} marked as incomplete in database`);
+          await apiClient.markTaskIncomplete(id);
+          console.log(`Task ${task.text} marked as incomplete in database`);
         } else {
           // Mark as complete
-          const completion = await apiClient.markHabitComplete(id);
+          const completion = await apiClient.markTaskComplete(id);
           console.log(
-            `Habit ${task.text} marked as complete in database:`,
+            `Task ${task.text} marked as complete in database:`,
             completion,
           );
         }
       } else {
-        // For regular tasks, update via the update API
+        // For one-time tasks, update via the update API
         await updateTask({
           id,
           completed: !task.completed,
@@ -369,14 +353,14 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     }
   };
 
-  const initFoundationalHabits = async () => {
+  const initFoundationalTasks = async () => {
     // This is handled automatically when loading tasks from the API
     await loadTasks();
   };
 
-  const resetDailyHabits = async () => {
+  const resetDailyTasks = async () => {
     try {
-      console.log("🔄 Starting daily habits reset...");
+      console.log("🔄 Starting daily tasks reset...");
       console.log("Current online status:", state.isOnline);
       console.log("Current tasks count:", state.tasks.length);
 
@@ -386,7 +370,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       if (!state.isOnline) {
         // Reset locally if offline
         console.log("📱 Offline mode: resetting locally");
-        dispatch({ type: "RESET_DAILY_HABITS_LOCAL" });
+        dispatch({ type: "RESET_DAILY_TASKS_LOCAL" });
         console.log("✅ Offline reset complete");
         return;
       }
@@ -399,7 +383,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       await refreshTasks();
       console.log("✅ Tasks refreshed successfully");
     } catch (error) {
-      console.error("❌ Failed to reset daily habits:", error);
+      console.error("❌ Failed to reset daily tasks:", error);
       console.error("Error details:", {
         message: error instanceof Error ? error.message : "Unknown error",
         stack: error instanceof Error ? error.stack : undefined,
@@ -412,7 +396,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         payload:
           error instanceof Error
             ? `Reset failed: ${error.message}`
-            : "Failed to reset daily habits",
+            : "Failed to reset daily tasks",
       });
     }
   };
@@ -427,8 +411,8 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     updateTask,
     deleteTask,
     toggleTask,
-    initFoundationalHabits,
-    resetDailyHabits,
+    initFoundationalTasks,
+    resetDailyTasks,
     refreshTasks,
   };
 

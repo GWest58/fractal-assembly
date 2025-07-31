@@ -6,26 +6,40 @@ const getApiBaseUrl = () => {
     const hostname = window.location.hostname;
     return `${protocol}//${hostname}:3001/api`;
   }
+
+  // For mobile development - replace with your computer's IP address
+  // To find your IP: run `ipconfig getifaddr en0` on Mac or `ipconfig` on Windows
+  // Example: "http://192.168.1.100:3001/api"
+  const DEVELOPMENT_IP = "192.168.1.157"; // Your computer's IP address
+
+  // Check if running in Expo development
+  if (__DEV__ && process.env.NODE_ENV === "development") {
+    return `http://${DEVELOPMENT_IP}:3001/api`;
+  }
+
   // Default for mobile/native
   return "http://localhost:3001/api";
 };
 
 const API_BASE_URL = getApiBaseUrl();
 
-export interface Habit {
+export interface Task {
   id: string;
   text: string;
-  category: "health" | "wellness" | "productivity" | "personal";
-  isFoundational: boolean;
   completedToday: boolean;
   lastCompletedAt?: string;
   createdAt: string;
   updatedAt: string;
+  frequency?: {
+    type: string;
+    data: Record<string, unknown>;
+    time?: string;
+  };
 }
 
-export interface HabitCompletion {
+export interface TaskCompletion {
   id: string;
-  habitId: string;
+  taskId: string;
   completedAt: string;
   completionDate: string;
 }
@@ -87,83 +101,88 @@ class ApiClient {
     }
   }
 
-  // Habit management methods
-  async getHabits(date?: string): Promise<Habit[]> {
+  // Task management methods
+  async getTasks(date?: string): Promise<Task[]> {
     const params = date ? `?date=${date}` : "";
-    const response = await this.request<ApiResponse<Habit[]>>(
-      `/habits${params}`,
-    );
+    const response = await this.request<ApiResponse<Task[]>>(`/tasks${params}`);
     return response.data || [];
   }
 
-  async getHabit(id: string): Promise<Habit> {
-    const response = await this.request<ApiResponse<Habit>>(`/habits/${id}`);
+  async getTask(id: string): Promise<Task> {
+    const response = await this.request<ApiResponse<Task>>(`/tasks/${id}`);
     if (!response.data) {
-      throw new Error("Habit not found");
+      throw new Error("Task not found");
     }
     return response.data;
   }
 
-  async createHabit(habit: {
+  async createTask(task: {
     text: string;
-    category: "health" | "wellness" | "productivity" | "personal";
-    isFoundational?: boolean;
-  }): Promise<Habit> {
-    const response = await this.request<ApiResponse<Habit>>("/habits", {
+    frequency?: {
+      type: string;
+      data: Record<string, unknown>;
+      time?: string;
+    };
+  }): Promise<Task> {
+    const response = await this.request<ApiResponse<Task>>("/tasks", {
       method: "POST",
-      body: JSON.stringify(habit),
+      body: JSON.stringify(task),
     });
     if (!response.data) {
-      throw new Error("Failed to create habit");
+      throw new Error("Failed to create task");
     }
     return response.data;
   }
 
-  async updateHabit(
+  async updateTask(
     id: string,
     updates: {
       text?: string;
-      category?: "health" | "wellness" | "productivity" | "personal";
+      frequency?: {
+        type: string;
+        data: Record<string, unknown>;
+        time?: string;
+      };
     },
-  ): Promise<Habit> {
-    const response = await this.request<ApiResponse<Habit>>(`/habits/${id}`, {
+  ): Promise<Task> {
+    const response = await this.request<ApiResponse<Task>>(`/tasks/${id}`, {
       method: "PUT",
       body: JSON.stringify(updates),
     });
     if (!response.data) {
-      throw new Error("Failed to update habit");
+      throw new Error("Failed to update task");
     }
     return response.data;
   }
 
-  async deleteHabit(id: string): Promise<void> {
-    await this.request<ApiResponse<void>>(`/habits/${id}`, {
+  async deleteTask(id: string): Promise<void> {
+    await this.request<ApiResponse<void>>(`/tasks/${id}`, {
       method: "DELETE",
     });
   }
 
   // Completion tracking methods
-  async markHabitComplete(
-    habitId: string,
+  async markTaskComplete(
+    taskId: string,
     completedAt?: string,
-  ): Promise<HabitCompletion> {
-    const response = await this.request<ApiResponse<HabitCompletion>>(
-      `/habits/${habitId}/complete`,
+  ): Promise<TaskCompletion> {
+    const response = await this.request<ApiResponse<TaskCompletion>>(
+      `/tasks/${taskId}/complete`,
       {
         method: "POST",
         body: JSON.stringify(completedAt ? { completedAt } : {}),
       },
     );
     if (!response.data) {
-      throw new Error("Failed to mark habit as complete");
+      throw new Error("Failed to mark task as complete");
     }
     return response.data;
   }
 
-  async markHabitIncomplete(habitId: string, date?: string): Promise<void> {
+  async markTaskIncomplete(taskId: string, date?: string): Promise<void> {
     const params = date ? `?date=${date}` : "";
     await this.request<ApiResponse<void>>(
-      `/habits/${habitId}/complete${params}`,
+      `/tasks/${taskId}/complete${params}`,
       {
         method: "DELETE",
       },
@@ -171,10 +190,10 @@ class ApiClient {
   }
 
   // Statistics methods
-  async getHabitStats(habitId: string, days: number = 30) {
+  async getTaskStats(taskId: string, days: number = 30) {
     const response = await this.request<
       ApiResponse<{
-        habit: Habit;
+        task: Task;
         stats: {
           totalDays: number;
           completedDays: number;
@@ -182,15 +201,15 @@ class ApiClient {
           streak: number;
         };
       }>
-    >(`/habits/${habitId}/stats?days=${days}`);
+    >(`/tasks/${taskId}/stats?days=${days}`);
     return response.data;
   }
 
   // Completion queries
-  async getTodayCompletions(date?: string): Promise<HabitCompletion[]> {
+  async getTodayCompletions(date?: string): Promise<TaskCompletion[]> {
     const params = date ? `?date=${date}` : "";
-    const response = await this.request<ApiResponse<HabitCompletion[]>>(
-      `/habits/completions/today${params}`,
+    const response = await this.request<ApiResponse<TaskCompletion[]>>(
+      `/tasks/completions/today${params}`,
     );
     return response.data || [];
   }
@@ -198,9 +217,9 @@ class ApiClient {
   async getCompletionsRange(
     startDate: string,
     endDate: string,
-  ): Promise<HabitCompletion[]> {
-    const response = await this.request<ApiResponse<HabitCompletion[]>>(
-      `/habits/completions/range?startDate=${startDate}&endDate=${endDate}`,
+  ): Promise<TaskCompletion[]> {
+    const response = await this.request<ApiResponse<TaskCompletion[]>>(
+      `/tasks/completions/range?startDate=${startDate}&endDate=${endDate}`,
     );
     return response.data || [];
   }
@@ -218,7 +237,7 @@ class ApiClient {
           resetCount: number;
           date: string;
         }>
-      >("/habits/reset-day", {
+      >("/tasks/reset-day", {
         method: "POST",
         body: JSON.stringify(requestBody),
       });
@@ -270,7 +289,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public statusCode?: number,
-    public response?: any,
+    public response?: unknown,
   ) {
     super(message);
     this.name = "ApiError";
@@ -296,14 +315,14 @@ export const debugApi = {
     }
   },
 
-  async testGetHabits() {
-    console.log("🔍 Testing get habits...");
+  async testGetTasks() {
+    console.log("🔍 Testing get tasks...");
     try {
-      const habits = await apiClient.getHabits();
-      console.log("✅ Got habits:", habits);
-      return habits;
+      const tasks = await apiClient.getTasks();
+      console.log("✅ Got tasks:", tasks);
+      return tasks;
     } catch (error) {
-      console.error("❌ Get habits failed:", error);
+      console.error("❌ Get tasks failed:", error);
       throw error;
     }
   },
@@ -324,9 +343,9 @@ export const debugApi = {
     console.log("🧪 Running full API test suite...");
     try {
       await this.testConnection();
-      await this.testGetHabits();
+      await this.testGetTasks();
       console.log("✅ All basic tests passed!");
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("❌ Test suite failed:", error);
     }
   },
@@ -334,7 +353,7 @@ export const debugApi = {
 
 // Make debug functions available globally in development
 if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
-  (window as any).debugApi = debugApi;
-  (window as any).apiClient = apiClient;
+  (window as Record<string, unknown>).debugApi = debugApi;
+  (window as Record<string, unknown>).apiClient = apiClient;
   console.log("🛠️ Debug tools available: window.debugApi, window.apiClient");
 }

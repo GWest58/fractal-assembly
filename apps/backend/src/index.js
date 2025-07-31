@@ -4,7 +4,8 @@ import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import database from "./models/database.js";
-import habitsRouter from "./routes/habits.js";
+import tasksRouter from "./routes/tasks.js";
+import adminRouter from "./routes/admin.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -92,7 +93,8 @@ app.get("/health", (req, res) => {
 });
 
 // API routes
-app.use("/api/habits", habitsRouter);
+app.use("/api/tasks", tasksRouter);
+app.use("/admin", adminRouter);
 
 // Root endpoint
 app.get("/", (req, res) => {
@@ -102,7 +104,7 @@ app.get("/", (req, res) => {
     version: "1.0.0",
     endpoints: {
       health: "/health",
-      habits: "/api/habits",
+      tasks: "/api/tasks",
       documentation: "See README.md for API documentation",
     },
   });
@@ -193,7 +195,7 @@ async function startServer() {
 🚀 Fractal Assembly Backend Server Started!
 📍 Server running on port ${PORT}
 🌐 Health check: http://localhost:${PORT}/health
-📚 API endpoints: http://localhost:${PORT}/api/habits
+📚 API endpoints: http://localhost:${PORT}/api/tasks
 🕐 Started at: ${new Date().toISOString()}
       `);
     });

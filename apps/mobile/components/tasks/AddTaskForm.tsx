@@ -5,13 +5,15 @@ import {
   TextInput,
   TouchableOpacity,
   Modal,
-  Switch,
 } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useTask } from "@/contexts/TaskContext";
 import { useThemeColor } from "@/hooks/useThemeColor";
+
 import { Text } from "react-native";
+import { FrequencySelector } from "./FrequencySelector";
+import { TaskFrequency } from "@/types/Task";
 
 interface AddTaskFormProps {
   visible: boolean;
@@ -24,10 +26,11 @@ export const AddTaskForm: React.FC<AddTaskFormProps> = ({
 }) => {
   const { addTask } = useTask();
   const [taskText, setTaskText] = useState("");
-  const [isFoundational, setIsFoundational] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<
-    "health" | "wellness" | "productivity" | "personal" | undefined
-  >(undefined);
+
+  const [frequency, setFrequency] = useState<TaskFrequency | undefined>(
+    undefined,
+  );
+  const [showFrequencySelector, setShowFrequencySelector] = useState(false);
 
   // Theme colors
   const backgroundColor = useThemeColor(
@@ -52,18 +55,41 @@ export const AddTaskForm: React.FC<AddTaskFormProps> = ({
     { light: "#e1e1e1", dark: "#333" },
     "text",
   );
+  const frequencyButtonBg = useThemeColor(
+    { light: "#f9f9f9", dark: "#2a2a2a" },
+    "background",
+  );
 
   const handleSubmit = () => {
     if (taskText.trim()) {
       addTask({
         text: taskText.trim(),
-        isFoundational,
-        category: selectedCategory,
+        frequency: frequency,
       });
       setTaskText("");
-      setIsFoundational(false);
-      setSelectedCategory(undefined);
+      setFrequency(undefined);
       onClose();
+    }
+  };
+
+  const getFrequencyDisplayText = () => {
+    if (!frequency) return "One-time task";
+
+    switch (frequency.type) {
+      case "daily":
+        return frequency.time ? `Daily at ${frequency.time}` : "Daily";
+      case "specific_days":
+        const days = frequency.data.days?.join(", ") || "";
+        const timeStr = frequency.time ? ` at ${frequency.time}` : "";
+        return days ? `${days}${timeStr}` : "Select days";
+      case "times_per_week":
+        const weekTimeStr = frequency.time ? ` at ${frequency.time}` : "";
+        return `${frequency.data.count || 3} times per week${weekTimeStr}`;
+      case "times_per_month":
+        const monthTimeStr = frequency.time ? ` at ${frequency.time}` : "";
+        return `${frequency.data.count || 3} times per month${monthTimeStr}`;
+      default:
+        return "One-time task";
     }
   };
 
@@ -110,69 +136,24 @@ export const AddTaskForm: React.FC<AddTaskFormProps> = ({
           />
 
           <View style={styles.optionsContainer}>
-            <View
-              style={[styles.switchContainer, { borderColor: borderColor }]}
-            >
-              <ThemedText style={styles.switchLabel}>
-                Foundational Habit
-              </ThemedText>
-              <Switch
-                value={isFoundational}
-                onValueChange={setIsFoundational}
-                trackColor={{ false: "#767577", true: "#FF6B35" }}
-                thumbColor={isFoundational ? "#fff" : "#f4f3f4"}
-              />
+            <View style={styles.frequencyContainer}>
+              <ThemedText style={styles.frequencyLabel}>Frequency:</ThemedText>
+              <TouchableOpacity
+                style={[
+                  styles.frequencyButton,
+                  {
+                    borderColor: borderColor,
+                    backgroundColor: frequencyButtonBg,
+                  },
+                ]}
+                onPress={() => setShowFrequencySelector(true)}
+              >
+                <ThemedText style={styles.frequencyButtonText}>
+                  {getFrequencyDisplayText()}
+                </ThemedText>
+                <ThemedText style={styles.frequencyButtonArrow}>→</ThemedText>
+              </TouchableOpacity>
             </View>
-
-            {isFoundational && (
-              <View style={styles.categoryContainer}>
-                <ThemedText style={styles.categoryLabel}>Category:</ThemedText>
-                <View style={styles.categoryButtons}>
-                  {(
-                    [
-                      { key: "health", label: "💊 Health", color: "#FF6B6B" },
-                      {
-                        key: "wellness",
-                        label: "🧘 Wellness",
-                        color: "#4ECDC4",
-                      },
-                      {
-                        key: "productivity",
-                        label: "📋 Productivity",
-                        color: "#45B7D1",
-                      },
-                      {
-                        key: "personal",
-                        label: "🛏️ Personal",
-                        color: "#96CEB4",
-                      },
-                    ] as const
-                  ).map((category) => (
-                    <TouchableOpacity
-                      key={category.key}
-                      style={[
-                        styles.categoryButton,
-                        selectedCategory === category.key && {
-                          backgroundColor: category.color,
-                        },
-                      ]}
-                      onPress={() => setSelectedCategory(category.key)}
-                    >
-                      <Text
-                        style={[
-                          styles.categoryButtonText,
-                          selectedCategory === category.key && {
-                            color: "white",
-                          },
-                        ]}
-                      >
-                        {category.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            )}
           </View>
 
           <View style={styles.buttonContainer}>
@@ -182,13 +163,9 @@ export const AddTaskForm: React.FC<AddTaskFormProps> = ({
                 styles.addButton,
                 !taskText.trim() && styles.addButtonDisabled,
               ]}
-              disabled={
-                !taskText.trim() || (isFoundational && !selectedCategory)
-              }
+              disabled={!taskText.trim()}
             >
-              <Text style={styles.addButtonText}>
-                {isFoundational ? "Add Foundational Habit" : "Add Task"}
-              </Text>
+              <Text style={styles.addButtonText}>Add Task</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -199,6 +176,13 @@ export const AddTaskForm: React.FC<AddTaskFormProps> = ({
             </TouchableOpacity>
           </View>
         </View>
+
+        <FrequencySelector
+          visible={showFrequencySelector}
+          onClose={() => setShowFrequencySelector(false)}
+          onSelect={(freq) => setFrequency(freq)}
+          initialFrequency={frequency}
+        />
       </ThemedView>
     </Modal>
   );
@@ -231,7 +215,7 @@ const styles = StyleSheet.create({
   closeButtonText: {
     fontSize: 20,
     fontWeight: "bold",
-    opacity: 0.8,
+    opacity: 0.9,
   },
   content: {
     flex: 1,
@@ -290,50 +274,38 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   cancelButtonText: {
-    opacity: 0.8,
+    opacity: 0.9,
     fontSize: 17,
     fontWeight: "600",
   },
   optionsContainer: {
     marginBottom: 24,
   },
-  switchContainer: {
+
+  frequencyContainer: {
+    marginBottom: 16,
+  },
+  frequencyLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 12,
+  },
+  frequencyButton: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     padding: 16,
     borderWidth: 1,
     borderRadius: 12,
-    marginBottom: 16,
   },
-  switchLabel: {
+  frequencyButtonText: {
     fontSize: 16,
-    fontWeight: "600",
-  },
-  categoryContainer: {
-    marginBottom: 16,
-  },
-  categoryLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 12,
-  },
-  categoryButtons: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  categoryButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#e1e1e1",
-    backgroundColor: "#f9f9f9",
-  },
-  categoryButtonText: {
-    fontSize: 14,
     fontWeight: "500",
-    color: "#333",
+    flex: 1,
+  },
+  frequencyButtonArrow: {
+    fontSize: 16,
+    fontWeight: "600",
+    opacity: 0.8,
   },
 });

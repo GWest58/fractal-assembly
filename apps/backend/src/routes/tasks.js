@@ -1,108 +1,98 @@
 import express from "express";
-import Habit from "../models/Habit.js";
+import Task from "../models/Task.js";
 
 const router = express.Router();
 
-// GET /api/habits - Get all foundational habits with today's completion status
+// GET /api/tasks - Get all tasks with today's completion status
 router.get("/", async (req, res) => {
   try {
     const date = req.query.date ? new Date(req.query.date) : new Date();
-    const habits = await Habit.getHabitsWithTodayStatus(date);
+    const tasks = await Task.getTasksWithTodayStatus(date);
     res.json({
       success: true,
-      data: habits,
+      data: tasks,
       date: date.toISOString().split("T")[0],
     });
   } catch (error) {
-    console.error("Error fetching habits:", error);
+    console.error("Error fetching tasks:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to fetch habits",
+      error: "Failed to fetch tasks",
       message: error.message,
     });
   }
 });
 
-// GET /api/habits/:id - Get a specific habit
+// GET /api/tasks/:id - Get a specific task
 router.get("/:id", async (req, res) => {
   try {
-    const habit = await Habit.getById(req.params.id);
-    if (!habit) {
+    const task = await Task.getById(req.params.id);
+    if (!task) {
       return res.status(404).json({
         success: false,
-        error: "Habit not found",
+        error: "Task not found",
       });
     }
     res.json({
       success: true,
-      data: habit,
+      data: task,
     });
   } catch (error) {
-    console.error("Error fetching habit:", error);
+    console.error("Error fetching task:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to fetch habit",
+      error: "Failed to fetch task",
       message: error.message,
     });
   }
 });
 
-// POST /api/habits - Create a new habit
+// POST /api/tasks - Create a new task
 router.post("/", async (req, res) => {
   try {
-    const { text, category, isFoundational } = req.body;
+    const { text, frequency } = req.body;
 
     // Validation
     if (!text || !text.trim()) {
       return res.status(400).json({
         success: false,
-        error: "Habit text is required",
+        error: "Task text is required",
       });
     }
 
-    const validCategories = ["health", "wellness", "productivity", "personal"];
-    if (category && !validCategories.includes(category)) {
-      return res.status(400).json({
-        success: false,
-        error:
-          "Invalid category. Must be one of: " + validCategories.join(", "),
-      });
-    }
-
-    const habitData = {
+    const taskData = {
       text: text.trim(),
-      category: category || "personal",
-      isFoundational: isFoundational !== undefined ? isFoundational : true,
+      frequency: frequency || { type: "daily", data: {}, time: null },
     };
 
-    const habit = await Habit.create(habitData);
+    const task = await Task.create(taskData);
     res.status(201).json({
       success: true,
-      data: habit,
-      message: "Habit created successfully",
+      data: task,
+      message: "Task created successfully",
     });
   } catch (error) {
-    console.error("Error creating habit:", error);
+    console.error("Error creating task:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to create habit",
+      error: "Failed to create task",
       message: error.message,
     });
   }
 });
 
-// PUT /api/habits/:id - Update a habit
+// PUT /api/tasks/:id - Update a task
 router.put("/:id", async (req, res) => {
   try {
-    const { text, category } = req.body;
-    const habitId = req.params.id;
+    const { text, frequency } = req.body;
+    const taskId = req.params.id;
 
-    // Check if habit exists
-    const existingHabit = await Habit.getById(habitId);
-    if (!existingHabit) {
+    // Check if task exists
+    const existingTask = await Task.getById(taskId);
+    if (!existingTask) {
       return res.status(404).json({
         success: false,
-        error: "Habit not found",
+        error: "Task not found",
       });
     }
 
@@ -110,138 +100,121 @@ router.put("/:id", async (req, res) => {
     if (!text || !text.trim()) {
       return res.status(400).json({
         success: false,
-        error: "Habit text is required",
-      });
-    }
-
-    const validCategories = ["health", "wellness", "productivity", "personal"];
-    if (category && !validCategories.includes(category)) {
-      return res.status(400).json({
-        success: false,
-        error:
-          "Invalid category. Must be one of: " + validCategories.join(", "),
+        error: "Task text is required",
       });
     }
 
     const updateData = {
       text: text.trim(),
-      category: category || existingHabit.category,
+      frequency: frequency || existingTask.frequency,
     };
 
-    const updatedHabit = await Habit.update(habitId, updateData);
+    const updatedTask = await Task.update(taskId, updateData);
     res.json({
       success: true,
-      data: updatedHabit,
-      message: "Habit updated successfully",
+      data: updatedTask,
+      message: "Task updated successfully",
     });
   } catch (error) {
-    console.error("Error updating habit:", error);
+    console.error("Error updating task:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to update habit",
+      error: "Failed to update task",
       message: error.message,
     });
   }
 });
 
-// DELETE /api/habits/:id - Delete a habit (only non-foundational habits)
+// DELETE /api/tasks/:id - Delete a task
 router.delete("/:id", async (req, res) => {
   try {
-    const habitId = req.params.id;
-    const habit = await Habit.getById(habitId);
+    const taskId = req.params.id;
+    const task = await Task.getById(taskId);
 
-    if (!habit) {
+    if (!task) {
       return res.status(404).json({
         success: false,
-        error: "Habit not found",
+        error: "Task not found",
       });
     }
 
-    // Prevent deletion of foundational habits
-    if (habit.isFoundational) {
-      return res.status(403).json({
-        success: false,
-        error: "Cannot delete foundational habits",
-      });
-    }
-
-    const deleted = await Habit.delete(habitId);
+    const deleted = await Task.delete(taskId);
     if (deleted) {
       res.json({
         success: true,
-        message: "Habit deleted successfully",
+        message: "Task deleted successfully",
       });
     } else {
       res.status(500).json({
         success: false,
-        error: "Failed to delete habit",
+        error: "Failed to delete task",
       });
     }
   } catch (error) {
-    console.error("Error deleting habit:", error);
+    console.error("Error deleting task:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to delete habit",
+      error: "Failed to delete task",
       message: error.message,
     });
   }
 });
 
-// POST /api/habits/:id/complete - Mark habit as completed for today
+// POST /api/tasks/:id/complete - Mark task as completed for today
 router.post("/:id/complete", async (req, res) => {
   try {
-    const habitId = req.params.id;
+    const taskId = req.params.id;
     const { completedAt } = req.body;
 
-    // Check if habit exists
-    const habit = await Habit.getById(habitId);
-    if (!habit) {
+    // Check if task exists
+    const task = await Task.getById(taskId);
+    if (!task) {
       return res.status(404).json({
         success: false,
-        error: "Habit not found",
+        error: "Task not found",
       });
     }
 
     const completionTime = completedAt ? new Date(completedAt) : new Date();
-    const completion = await Habit.markComplete(habitId, completionTime);
+    const completion = await Task.markComplete(taskId, completionTime);
 
     res.json({
       success: true,
       data: completion,
-      message: "Habit marked as completed",
+      message: "Task marked as completed",
     });
   } catch (error) {
-    console.error("Error marking habit complete:", error);
+    console.error("Error marking task complete:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to mark habit as completed",
+      error: "Failed to mark task as completed",
       message: error.message,
     });
   }
 });
 
-// DELETE /api/habits/:id/complete - Mark habit as incomplete for today
+// DELETE /api/tasks/:id/complete - Mark task as incomplete for today
 router.delete("/:id/complete", async (req, res) => {
   try {
-    const habitId = req.params.id;
+    const taskId = req.params.id;
     const { date } = req.query;
 
-    // Check if habit exists
-    const habit = await Habit.getById(habitId);
-    if (!habit) {
+    // Check if task exists
+    const task = await Task.getById(taskId);
+    if (!task) {
       return res.status(404).json({
         success: false,
-        error: "Habit not found",
+        error: "Task not found",
       });
     }
 
     const targetDate = date ? new Date(date) : new Date();
-    const removed = await Habit.markIncomplete(habitId, targetDate);
+    const removed = await Task.markIncomplete(taskId, targetDate);
 
     if (removed) {
       res.json({
         success: true,
-        message: "Habit marked as incomplete",
+        message: "Task marked as incomplete",
       });
     } else {
       res.status(404).json({
@@ -250,53 +223,53 @@ router.delete("/:id/complete", async (req, res) => {
       });
     }
   } catch (error) {
-    console.error("Error marking habit incomplete:", error);
+    console.error("Error marking task incomplete:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to mark habit as incomplete",
+      error: "Failed to mark task as incomplete",
       message: error.message,
     });
   }
 });
 
-// GET /api/habits/:id/stats - Get completion statistics for a habit
+// GET /api/tasks/:id/stats - Get completion statistics for a task
 router.get("/:id/stats", async (req, res) => {
   try {
-    const habitId = req.params.id;
+    const taskId = req.params.id;
     const days = parseInt(req.query.days) || 30;
 
-    // Check if habit exists
-    const habit = await Habit.getById(habitId);
-    if (!habit) {
+    // Check if task exists
+    const task = await Task.getById(taskId);
+    if (!task) {
       return res.status(404).json({
         success: false,
-        error: "Habit not found",
+        error: "Task not found",
       });
     }
 
-    const stats = await Habit.getCompletionStats(habitId, days);
+    const stats = await Task.getCompletionStats(taskId, days);
     res.json({
       success: true,
       data: {
-        habit: habit.toJSON(),
+        task: task.toJSON(),
         stats,
       },
     });
   } catch (error) {
-    console.error("Error fetching habit stats:", error);
+    console.error("Error fetching task stats:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to fetch habit statistics",
+      error: "Failed to fetch task statistics",
       message: error.message,
     });
   }
 });
 
-// GET /api/habits/completions/today - Get all completions for today
+// GET /api/tasks/completions/today - Get all completions for today
 router.get("/completions/today", async (req, res) => {
   try {
     const date = req.query.date ? new Date(req.query.date) : new Date();
-    const completions = await Habit.getCompletionsForDate(date);
+    const completions = await Task.getCompletionsForDate(date);
 
     res.json({
       success: true,
@@ -313,7 +286,7 @@ router.get("/completions/today", async (req, res) => {
   }
 });
 
-// GET /api/habits/completions/range - Get completions for a date range
+// GET /api/tasks/completions/range - Get completions for a date range
 router.get("/completions/range", async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
@@ -335,7 +308,7 @@ router.get("/completions/range", async (req, res) => {
       });
     }
 
-    const completions = await Habit.getCompletionsForDateRange(start, end);
+    const completions = await Task.getCompletionsForDateRange(start, end);
 
     res.json({
       success: true,
@@ -353,29 +326,29 @@ router.get("/completions/range", async (req, res) => {
   }
 });
 
-// POST /api/habits/reset-day - Reset all foundational habits for the day
+// POST /api/tasks/reset-day - Reset all recurring tasks for the day
 router.post("/reset-day", async (req, res) => {
   try {
     const { date } = req.body;
     const targetDate = date ? new Date(date) : new Date();
     const completionDate = targetDate.toISOString().split("T")[0];
 
-    // Get all foundational habits
-    const habits = await Habit.getAll();
+    // Get all tasks
+    const tasks = await Task.getAll();
 
     // Remove all completions for the target date
-    const promises = habits.map((habit) =>
-      Habit.markIncomplete(habit.id, targetDate),
+    const promises = tasks.map((task) =>
+      Task.markIncomplete(task.id, targetDate),
     );
     await Promise.all(promises);
 
     res.json({
       success: true,
       data: {
-        resetCount: habits.length,
+        resetCount: tasks.length,
         date: completionDate,
       },
-      message: `All foundational habits reset for ${completionDate}`,
+      message: `All recurring tasks reset for ${completionDate}`,
     });
   } catch (error) {
     console.error("Error resetting day:", error);

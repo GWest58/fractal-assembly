@@ -20,7 +20,7 @@ export default function HomeScreen() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [debugInfo, setDebugInfo] = useState("");
-  const { resetDailyHabits, refreshTasks, state } = useTask();
+  const { resetDailyTasks, refreshTasks, state } = useTask();
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -45,16 +45,16 @@ export default function HomeScreen() {
       // Use native Alert for mobile
       const Alert = require("react-native").Alert;
       Alert.alert(
-        "Reset Daily Habits",
-        "This will mark all foundational habits as incomplete for a new day. Are you sure?",
+        "Reset Daily Tasks",
+        "This will mark all recurring tasks as incomplete for a new day. Are you sure?",
         [
           { text: "Cancel", style: "cancel" },
           {
             text: "Reset",
             style: "destructive",
             onPress: () => {
-              resetDailyHabits();
-              Alert.alert("Success", "Daily habits have been reset!");
+              resetDailyTasks();
+              Alert.alert("Success", "Daily tasks have been reset!");
             },
           },
         ],
@@ -65,11 +65,11 @@ export default function HomeScreen() {
   const confirmReset = async () => {
     console.log(
       "Web reset triggered - before reset:",
-      state.tasks.filter((t) => t.isFoundational),
+      state.tasks.filter((t) => t.frequency),
     );
 
     try {
-      await resetDailyHabits();
+      await resetDailyTasks();
       setShowResetConfirm(false);
       // Clear debug info and refresh it
       setDebugInfo("");
@@ -77,7 +77,7 @@ export default function HomeScreen() {
       setTimeout(() => {
         console.log(
           "Web reset triggered - after reset:",
-          state.tasks.filter((t) => t.isFoundational),
+          state.tasks.filter((t) => t.frequency),
         );
         debugState();
       }, 100);
@@ -94,14 +94,14 @@ export default function HomeScreen() {
   };
 
   const debugState = () => {
-    const habits = state.tasks.filter((t) => t.isFoundational);
-    const debugStr = habits
+    const recurringTasks = state.tasks.filter((t) => t.frequency);
+    const debugStr = recurringTasks
       .map((h) => `${h.text}: ${h.completedToday ? "✅" : "⭕"}`)
       .join(" | ");
     setDebugInfo(
-      `${debugStr} | Total: ${habits.length}, Completed: ${completedToday.length} | Online: ${state.isOnline ? "✅" : "🔴"}`,
+      `${debugStr} | Total: ${recurringTasks.length}, Completed: ${completedToday.length} | Online: ${state.isOnline ? "✅" : "🔴"}`,
     );
-    console.log("Current foundational habits state:", habits);
+    console.log("Current recurring tasks state:", recurringTasks);
     console.log("Completed today count:", completedToday.length);
     console.log("Connection status:", state.isOnline);
     console.log("Loading state:", state.loading);
@@ -135,13 +135,11 @@ export default function HomeScreen() {
     }
   };
 
-  const foundationalHabits = state.tasks.filter((task) => task.isFoundational);
-  const completedToday = foundationalHabits.filter(
-    (task) => task.completedToday,
-  );
+  const recurringTasks = state.tasks.filter((task) => task.frequency);
+  const completedToday = recurringTasks.filter((task) => task.completedToday);
   const progressPercentage =
-    foundationalHabits.length > 0
-      ? Math.round((completedToday.length / foundationalHabits.length) * 100)
+    recurringTasks.length > 0
+      ? Math.round((completedToday.length / recurringTasks.length) * 100)
       : 0;
 
   const formatDate = (date: Date) => {
@@ -158,14 +156,14 @@ export default function HomeScreen() {
       <ThemedView style={styles.header}>
         <ThemedView style={styles.headerTop}>
           <ThemedView>
-            <ThemedText type="title">Foundational Habits</ThemedText>
+            <ThemedText type="title">My Tasks</ThemedText>
             <ThemedText style={styles.dateText}>
               {formatDate(currentDate)}
             </ThemedText>
             <ThemedView style={styles.statusRow}>
               <ThemedText style={styles.subtitle}>
-                Daily Progress: {completedToday.length}/
-                {foundationalHabits.length} ({progressPercentage}%)
+                Daily Progress: {completedToday.length}/{recurringTasks.length}{" "}
+                ({progressPercentage}%)
               </ThemedText>
               <ThemedText style={styles.connectionStatus}>
                 {state.isOnline ? "🟢 Online" : "🔴 Offline"}
@@ -217,12 +215,16 @@ export default function HomeScreen() {
         </ThemedView>
       </ThemedView>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+      >
         {state.loading && (
           <ThemedView style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#FF6B35" />
             <ThemedText style={styles.loadingText}>
-              {state.isOnline ? "Syncing with server..." : "Loading habits..."}
+              {state.isOnline ? "Syncing with server..." : "Loading tasks..."}
             </ThemedText>
           </ThemedView>
         )}
@@ -248,15 +250,14 @@ export default function HomeScreen() {
         <ThemedView style={styles.overlay}>
           <ThemedView style={styles.confirmDialog}>
             <ThemedText style={styles.confirmTitle}>
-              Reset Daily Habits
+              Reset Daily Tasks
             </ThemedText>
             <ThemedText style={styles.confirmMessage}>
-              This will mark all foundational habits as incomplete for a new
-              day. Are you sure?
+              This will mark all recurring tasks as incomplete for a new day.
+              Are you sure?
             </ThemedText>
             <ThemedText style={styles.debugInfo}>
-              Current completed: {completedToday.length}/
-              {foundationalHabits.length}
+              Current completed: {completedToday.length}/{recurringTasks.length}
             </ThemedText>
             <ThemedView style={styles.confirmButtons}>
               <TouchableOpacity
@@ -412,6 +413,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  scrollContainer: {
+    paddingBottom: 80,
   },
   overlay: {
     position: "absolute",
