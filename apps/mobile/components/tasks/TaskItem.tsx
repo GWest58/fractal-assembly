@@ -11,8 +11,8 @@ import { ThemedText, Body, Caption1, Caption2 } from "@/components/ThemedText";
 import { Button } from "@/components/ui/Button";
 import { useTask } from "@/contexts/TaskContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
-import { Colors } from "@/constants/Colors";
-import { Spacing, BorderRadius } from "@/constants/DesignTokens";
+import { Colors, TaskColors } from "@/constants/Colors";
+import { Spacing, BorderRadius, Typography } from "@/constants/DesignTokens";
 
 import { Task } from "@/types/Task";
 
