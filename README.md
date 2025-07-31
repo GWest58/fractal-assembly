@@ -1,14 +1,14 @@
 # Fractal Assembly
 
-A cross-platform habit tracking application focused on foundational daily habits that compound over time. The project consists of a React Native mobile app powered by Expo and a Node.js REST API backend.
+A cross-platform task tracking application focused on foundational daily tasks that compound over time. The project consists of a React Native mobile app powered by Expo and a Node.js REST API backend.
 
 ## 🎯 Project Overview
 
-Fractal Assembly is designed around the concept that small, consistent daily habits create powerful compound effects over time - like fractals where simple patterns create complex, beautiful structures. The app focuses on tracking "foundational habits" - essential daily activities that form the building blocks of a productive and healthy lifestyle.
+Fractal Assembly is designed around the concept that small, consistent daily tasks create powerful compound effects over time - like fractals where simple patterns create complex, beautiful structures. The app focuses on tracking "foundational tasks" - essential daily activities that form the building blocks of a productive and healthy lifestyle.
 
 ### Core Philosophy
-- **Foundational Focus**: Emphasis on 5 core daily habits rather than overwhelming users with endless tasks
-- **Daily Reset**: Each day starts fresh with the ability to reset all habits
+- **Foundational Focus**: Emphasis on 5 core daily tasks rather than overwhelming users with endless activities
+- **Daily Reset**: Each day starts fresh with the ability to reset all tasks
 - **Simplicity**: Clean, intuitive interface that encourages consistent daily engagement
 - **Compound Growth**: Track streaks and completion rates to visualize the power of consistency
 
@@ -71,7 +71,7 @@ cd fractal-assembly
 # Install dependencies for all workspaces
 pnpm install
 
-# Initialize the database with foundational habits
+# Initialize the database with foundational tasks
 pnpm run init-db
 ```
 
@@ -107,29 +107,29 @@ pnpm --filter mobile ios
 ### ✅ Implemented Features
 
 #### Backend API
-- **Foundational Habits Management**: CRUD operations for habit tracking
-- **Daily Completion Tracking**: Mark habits complete/incomplete with timestamps
+- **Foundational Tasks Management**: CRUD operations for task tracking
+- **Daily Completion Tracking**: Mark tasks complete/incomplete with timestamps
 - **Statistics & Streaks**: Calculate completion rates and streak counts
-- **Category Organization**: Habits organized by health, wellness, productivity, personal
+- **Category Organization**: Tasks organized by health, wellness, productivity, personal
 - **Date Range Queries**: Query completions across specific date ranges
-- **Daily Reset Functionality**: Reset all habits for a new day
+- **Daily Reset Functionality**: Reset all tasks for a new day
 - **Health Check Endpoint**: Monitor API status and uptime
 - **Robust Error Handling**: Comprehensive error responses with proper HTTP status codes
 - **Security Features**: Rate limiting, CORS protection, helmet security headers
 - **Database Persistence**: SQLite with proper schema and relationships
 
 #### Mobile App
-- **Foundational Habits Display**: Clean list view of daily habits
+- **Foundational Tasks Display**: Clean list view of daily tasks
 - **Real-time Progress Tracking**: Visual progress indicator showing completion percentage
-- **Daily Reset Functionality**: Button to reset all habits for a new day
+- **Daily Reset Functionality**: Button to reset all tasks for a new day
 - **Online/Offline Status**: Connection status indicator
 - **Debug Tools**: Built-in debugging buttons for development
 - **Cross-platform Support**: Runs on iOS, Android, and web
 - **Auto-refresh**: Automatic data synchronization with backend
 - **Date Display**: Current date and progress tracking
 
-#### Default Foundational Habits
-The system comes pre-configured with 5 essential daily habits:
+#### Default Foundational Tasks
+The system comes pre-configured with 5 essential daily tasks:
 1. **Make bed** (personal)
 2. **Take meds** (health) 
 3. **Meditate 5 minutes** (wellness)
@@ -142,44 +142,45 @@ The system comes pre-configured with 5 essential daily habits:
 
 #### Core Endpoints
 - `GET /health` - Health check
-- `GET /api/habits` - Get all habits with today's completion status
-- `GET /api/habits/:id` - Get specific habit details
-- `POST /api/habits` - Create new habit
-- `PUT /api/habits/:id` - Update habit
-- `DELETE /api/habits/:id` - Delete habit (non-foundational only)
-- `POST /api/habits/:id/complete` - Mark habit complete
-- `DELETE /api/habits/:id/complete` - Mark habit incomplete
-- `GET /api/habits/completions/today` - Get today's completions
-- `GET /api/habits/completions/range` - Get completions for date range
-- `GET /api/habits/:id/stats` - Get habit statistics
-- `POST /api/habits/reset-day` - Reset all habits for a day
+- `GET /api/tasks` - Get all tasks with today's completion status
+- `GET /api/tasks/:id` - Get specific task details
+- `POST /api/tasks` - Create new task
+- `PUT /api/tasks/:id` - Update task
+- `DELETE /api/tasks/:id` - Delete task (non-foundational only)
+- `POST /api/tasks/:id/complete` - Mark task complete
+- `DELETE /api/tasks/:id/complete` - Mark task incomplete
+- `GET /api/tasks/completions/today` - Get today's completions
+- `GET /api/tasks/completions/range` - Get completions for date range
+- `GET /api/tasks/:id/stats` - Get task statistics
+- `POST /api/tasks/reset-day` - Reset all tasks for a day
 
 ## 🗄️ Database Schema
 
 ### Tables
 
-#### `habits`
+#### `tasks`
 ```sql
-CREATE TABLE habits (
+CREATE TABLE tasks (
   id TEXT PRIMARY KEY,
   text TEXT NOT NULL,
-  category TEXT NOT NULL CHECK (category IN ('health', 'wellness', 'productivity', 'personal')),
-  is_foundational BOOLEAN NOT NULL DEFAULT 1,
+  frequency_type TEXT DEFAULT 'daily',
+  frequency_data TEXT DEFAULT '{}',
+  frequency_time TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
-#### `habit_completions`
+#### `task_completions`
 ```sql
-CREATE TABLE habit_completions (
+CREATE TABLE task_completions (
   id TEXT PRIMARY KEY,
-  habit_id TEXT NOT NULL,
+  task_id TEXT NOT NULL,
   completed_at DATETIME NOT NULL,
   completion_date DATE NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (habit_id) REFERENCES habits (id) ON DELETE CASCADE,
-  UNIQUE(habit_id, completion_date)
+  FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE,
+  UNIQUE(task_id, completion_date)
 );
 ```
 
@@ -240,7 +241,7 @@ pnpm --filter mobile web
 - No user accounts or data isolation
 
 ### Features
-- Limited to foundational habits (no custom habit creation in UI)
+- Limited to foundational tasks (no custom task creation in UI)
 - No data export/import functionality
 - No push notifications
 - No social features or sharing
@@ -256,21 +257,21 @@ pnpm --filter mobile web
 ### Short-term Improvements
 - [ ] Implement comprehensive testing suite
 - [ ] Add user authentication and authorization
-- [ ] Implement custom habit creation in mobile UI
-- [ ] Add push notifications for habit reminders
+- [ ] Implement custom task creation in mobile UI
+- [ ] Add push notifications for task reminders
 - [ ] Improve offline functionality with local storage
 
 ### Medium-term Features
 - [ ] Advanced analytics and insights dashboard
-- [ ] Habit templates and recommendations
+- [ ] Task templates and recommendations
 - [ ] Data export/import functionality
 - [ ] Social features (sharing progress, challenges)
-- [ ] Customizable habit categories
-- [ ] Multiple habit schedules (weekly, custom intervals)
+- [ ] Customizable task categories
+- [ ] Multiple task schedules (weekly, custom intervals)
 
 ### Long-term Vision
 - [ ] Web dashboard application
-- [ ] Machine learning for habit recommendations
+- [ ] Machine learning for task recommendations
 - [ ] Integration with health apps and wearables
 - [ ] Community features and challenges
 - [ ] Subscription service with premium features
