@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "mobile",
-    "slug": "mobile",
+    "slug": "fractal-assembly",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -37,6 +37,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "88da3355-f165-4c80-b3bb-78a2ee77a874"
+      }
+    },
+    "owner": "gpwest"
   }
 }

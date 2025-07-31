@@ -5,87 +5,81 @@ import React, {
   ReactNode,
   useEffect,
 } from "react";
-import {
-  Task,
-  CreateTaskInput,
-  UpdateTaskInput,
-  FOUNDATIONAL_HABITS,
-} from "@/types/Task";
+import { Task, CreateTaskInput, UpdateTaskInput } from "@/types/Task";
+import { apiClient, checkApiConnection } from "@/services/api";
 
 interface TaskState {
   tasks: Task[];
+  loading: boolean;
+  error: string | null;
+  isOnline: boolean;
 }
 
 type TaskAction =
-  | { type: "ADD_TASK"; payload: CreateTaskInput }
-  | { type: "UPDATE_TASK"; payload: UpdateTaskInput }
+  | { type: "SET_LOADING"; payload: boolean }
+  | { type: "SET_ERROR"; payload: string | null }
+  | { type: "SET_ONLINE"; payload: boolean }
+  | { type: "SET_TASKS"; payload: Task[] }
+  | { type: "ADD_TASK"; payload: Task }
+  | { type: "UPDATE_TASK"; payload: Task }
   | { type: "DELETE_TASK"; payload: string }
-  | { type: "TOGGLE_TASK"; payload: string }
-  | { type: "INIT_FOUNDATIONAL_HABITS" }
-  | { type: "RESET_DAILY_HABITS" };
+  | { type: "TOGGLE_TASK_LOCAL"; payload: string }
+  | { type: "RESET_DAILY_TASKS_LOCAL" };
 
 interface TaskContextType {
   state: TaskState;
-  addTask: (input: CreateTaskInput) => void;
-  updateTask: (input: UpdateTaskInput) => void;
-  deleteTask: (id: string) => void;
-  toggleTask: (id: string) => void;
-  initFoundationalHabits: () => void;
-  resetDailyHabits: () => void;
+  addTask: (input: CreateTaskInput) => Promise<void>;
+  updateTask: (input: UpdateTaskInput) => Promise<void>;
+  deleteTask: (id: string) => Promise<void>;
+  toggleTask: (id: string) => Promise<void>;
+  initFoundationalTasks: () => Promise<void>;
+  resetDailyTasks: () => Promise<void>;
+  refreshTasks: () => Promise<void>;
 }
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
 
 const taskReducer = (state: TaskState, action: TaskAction): TaskState => {
   switch (action.type) {
+    case "SET_LOADING":
+      return { ...state, loading: action.payload };
+
+    case "SET_ERROR":
+      return { ...state, error: action.payload };
+
+    case "SET_ONLINE":
+      return { ...state, isOnline: action.payload };
+
+    case "SET_TASKS":
+      return { ...state, tasks: action.payload, loading: false, error: null };
+
     case "ADD_TASK":
-      const newTask: Task = {
-        id: Date.now().toString(),
-        text: action.payload.text,
-        completed: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        isFoundational: action.payload.isFoundational || false,
-        category: action.payload.category,
-        completedToday: false,
-      };
       return {
         ...state,
-        tasks: [...state.tasks, newTask],
+        tasks: [...state.tasks, action.payload],
+        loading: false,
+        error: null,
       };
 
     case "UPDATE_TASK":
       return {
         ...state,
         tasks: state.tasks.map((task) =>
-          task.id === action.payload.id
-            ? {
-                ...task,
-                ...(action.payload.text !== undefined && {
-                  text: action.payload.text,
-                }),
-                ...(action.payload.completed !== undefined && {
-                  completed: action.payload.completed,
-                }),
-                ...(action.payload.completedToday !== undefined && {
-                  completedToday: action.payload.completedToday,
-                }),
-                ...(action.payload.lastCompletedDate !== undefined && {
-                  lastCompletedDate: action.payload.lastCompletedDate,
-                }),
-                updatedAt: new Date(),
-              }
-            : task,
+          task.id === action.payload.id ? action.payload : task,
         ),
+        loading: false,
+        error: null,
       };
 
     case "DELETE_TASK":
       return {
         ...state,
         tasks: state.tasks.filter((task) => task.id !== action.payload),
+        loading: false,
+        error: null,
       };
 
-    case "TOGGLE_TASK":
+    case "TOGGLE_TASK_LOCAL":
       return {
         ...state,
         tasks: state.tasks.map((task) =>
@@ -93,11 +87,11 @@ const taskReducer = (state: TaskState, action: TaskAction): TaskState => {
             ? {
                 ...task,
                 completed: !task.completed,
-                completedToday: task.isFoundational
+                completedToday: task.frequency
                   ? !task.completedToday
                   : !task.completed,
                 lastCompletedDate:
-                  task.isFoundational && !task.completedToday
+                  task.frequency && !task.completedToday
                     ? new Date()
                     : task.lastCompletedDate,
                 updatedAt: new Date(),
@@ -106,42 +100,14 @@ const taskReducer = (state: TaskState, action: TaskAction): TaskState => {
         ),
       };
 
-    case "INIT_FOUNDATIONAL_HABITS":
-      const existingHabits = state.tasks.filter((task) => task.isFoundational);
-      if (existingHabits.length === 0) {
-        const foundationalTasks: Task[] = FOUNDATIONAL_HABITS.map(
-          (habit, index) => ({
-            id: `foundational-${index}`,
-            text: habit.text,
-            completed: false,
-            completedToday: false,
-            isFoundational: true,
-            category: habit.category,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          }),
-        );
-        return {
-          ...state,
-          tasks: [...foundationalTasks, ...state.tasks],
-        };
-      }
-      return state;
-
-    case "RESET_DAILY_HABITS":
-      console.log("Resetting daily habits...");
-      const resetTasks = state.tasks.map((task) =>
-        task.isFoundational
-          ? { ...task, completedToday: false, updatedAt: new Date() }
-          : task,
-      );
-      console.log(
-        "Reset complete. Foundational tasks:",
-        resetTasks.filter((t) => t.isFoundational),
-      );
+    case "RESET_DAILY_TASKS_LOCAL":
       return {
         ...state,
-        tasks: resetTasks,
+        tasks: state.tasks.map((task) =>
+          task.frequency
+            ? { ...task, completedToday: false, updatedAt: new Date() }
+            : task,
+        ),
       };
 
     default:
@@ -154,36 +120,295 @@ interface TaskProviderProps {
 }
 
 export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
-  const [state, dispatch] = useReducer(taskReducer, { tasks: [] });
+  const [state, dispatch] = useReducer(taskReducer, {
+    tasks: [],
+    loading: true,
+    error: null,
+    isOnline: false,
+  });
 
+  // Convert API task to Task interface
+  const convertApiTaskToTask = (apiTask: {
+    id: string;
+    text: string;
+    completed?: boolean;
+    completedToday?: boolean;
+    frequency?: {
+      type: string;
+      data: Record<string, unknown>;
+      time?: string;
+    };
+    createdAt: string;
+    updatedAt: string;
+    lastCompletedAt?: string;
+  }): Task => ({
+    id: apiTask.id,
+    text: apiTask.text,
+    completed: apiTask.completed || false,
+    completedToday:
+      apiTask.frequency === null
+        ? apiTask.completed || false
+        : apiTask.completedToday || false,
+    frequency: apiTask.frequency,
+    createdAt: new Date(apiTask.createdAt),
+    updatedAt: new Date(apiTask.updatedAt),
+    lastCompletedDate: apiTask.lastCompletedAt
+      ? new Date(apiTask.lastCompletedAt)
+      : undefined,
+  });
+
+  // Check API connection
+  const checkConnection = async () => {
+    try {
+      const isOnline = await checkApiConnection();
+      dispatch({ type: "SET_ONLINE", payload: isOnline });
+      return isOnline;
+    } catch (error) {
+      console.error("Connection check failed:", error);
+      dispatch({ type: "SET_ONLINE", payload: false });
+      return false;
+    }
+  };
+
+  // Load tasks from API
+  const loadTasks = async () => {
+    try {
+      dispatch({ type: "SET_LOADING", payload: true });
+      dispatch({ type: "SET_ERROR", payload: null });
+
+      const isOnline = await checkConnection();
+      if (!isOnline) {
+        // No tasks available offline
+        dispatch({ type: "SET_TASKS", payload: [] });
+        return;
+      }
+
+      const apiTasks = await apiClient.getTasks();
+      const tasks = apiTasks.map(convertApiTaskToTask);
+      dispatch({ type: "SET_TASKS", payload: tasks });
+    } catch (error) {
+      console.error("Failed to load tasks:", error);
+      dispatch({
+        type: "SET_ERROR",
+        payload:
+          error instanceof Error ? error.message : "Failed to load tasks",
+      });
+
+      // No tasks available on error
+      dispatch({ type: "SET_TASKS", payload: [] });
+    }
+  };
+
+  // Initialize on mount
   useEffect(() => {
-    // Initialize foundational habits on first load
-    dispatch({ type: "INIT_FOUNDATIONAL_HABITS" });
+    loadTasks();
   }, []);
 
-  const addTask = (input: CreateTaskInput) => {
-    dispatch({ type: "ADD_TASK", payload: input });
+  const addTask = async (input: CreateTaskInput) => {
+    try {
+      dispatch({ type: "SET_LOADING", payload: true });
+      dispatch({ type: "SET_ERROR", payload: null });
+
+      if (!state.isOnline) {
+        // Create local task if offline
+        const newTask: Task = {
+          id: Date.now().toString(),
+          text: input.text,
+          completed: false,
+          completedToday: false,
+          frequency: input.frequency,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        dispatch({ type: "ADD_TASK", payload: newTask });
+        return;
+      }
+
+      const apiTask = await apiClient.createTask({
+        text: input.text,
+        frequency: input.frequency,
+      });
+
+      const newTask = convertApiTaskToTask(apiTask);
+      dispatch({ type: "ADD_TASK", payload: newTask });
+    } catch (error) {
+      console.error("Failed to add task:", error);
+      dispatch({
+        type: "SET_ERROR",
+        payload: error instanceof Error ? error.message : "Failed to add task",
+      });
+    }
   };
 
-  const updateTask = (input: UpdateTaskInput) => {
-    dispatch({ type: "UPDATE_TASK", payload: input });
+  const updateTask = async (input: UpdateTaskInput) => {
+    try {
+      dispatch({ type: "SET_LOADING", payload: true });
+      dispatch({ type: "SET_ERROR", payload: null });
+
+      if (!state.isOnline) {
+        // Update locally if offline
+        const existingTask = state.tasks.find((t) => t.id === input.id);
+        if (existingTask) {
+          const updatedTask: Task = {
+            ...existingTask,
+            ...(input.text !== undefined && { text: input.text }),
+            ...(input.completed !== undefined && {
+              completed: input.completed,
+            }),
+            ...(input.completedToday !== undefined && {
+              completedToday: input.completedToday,
+            }),
+            ...(input.lastCompletedDate !== undefined && {
+              lastCompletedDate: input.lastCompletedDate,
+            }),
+            updatedAt: new Date(),
+          };
+          dispatch({ type: "UPDATE_TASK", payload: updatedTask });
+        }
+        return;
+      }
+
+      const apiTask = await apiClient.updateTask(input.id, {
+        text: input.text,
+        frequency: input.frequency,
+        completed: input.completed,
+      });
+
+      const updatedTask = convertApiTaskToTask(apiTask);
+      dispatch({ type: "UPDATE_TASK", payload: updatedTask });
+    } catch (error) {
+      console.error("Failed to update task:", error);
+      dispatch({
+        type: "SET_ERROR",
+        payload:
+          error instanceof Error ? error.message : "Failed to update task",
+      });
+    }
   };
 
-  const deleteTask = (id: string) => {
-    dispatch({ type: "DELETE_TASK", payload: id });
+  const deleteTask = async (id: string) => {
+    try {
+      dispatch({ type: "SET_LOADING", payload: true });
+      dispatch({ type: "SET_ERROR", payload: null });
+
+      if (!state.isOnline) {
+        // Delete locally if offline
+        dispatch({ type: "DELETE_TASK", payload: id });
+        return;
+      }
+
+      await apiClient.deleteTask(id);
+      dispatch({ type: "DELETE_TASK", payload: id });
+    } catch (error) {
+      console.error("Failed to delete task:", error);
+      dispatch({
+        type: "SET_ERROR",
+        payload:
+          error instanceof Error ? error.message : "Failed to delete task",
+      });
+    }
   };
 
-  const toggleTask = (id: string) => {
-    dispatch({ type: "TOGGLE_TASK", payload: id });
+  const toggleTask = async (id: string) => {
+    try {
+      const task = state.tasks.find((t) => t.id === id);
+      if (!task) return;
+
+      // Optimistically update UI first
+      dispatch({ type: "TOGGLE_TASK_LOCAL", payload: id });
+
+      if (!state.isOnline) {
+        console.log("Offline mode: task toggled locally");
+        return;
+      }
+
+      // If it's a recurring task, use completion API
+      if (task.frequency) {
+        if (task.completedToday) {
+          // Mark as incomplete
+          await apiClient.markTaskIncomplete(id);
+          console.log(`Task ${task.text} marked as incomplete in database`);
+        } else {
+          // Mark as complete
+          const completion = await apiClient.markTaskComplete(id);
+          console.log(
+            `Task ${task.text} marked as complete in database:`,
+            completion,
+          );
+        }
+      } else {
+        // For one-time tasks, update via the update API
+        await updateTask({
+          id,
+          text: task.text,
+          completed: !task.completed,
+        });
+      }
+
+      // Refresh data to get updated state from server
+      await refreshTasks();
+    } catch (error) {
+      console.error("Failed to toggle task:", error);
+      // Revert optimistic update on error
+      dispatch({ type: "TOGGLE_TASK_LOCAL", payload: id });
+      dispatch({
+        type: "SET_ERROR",
+        payload:
+          error instanceof Error ? error.message : "Failed to toggle task",
+      });
+    }
   };
 
-  const initFoundationalHabits = () => {
-    dispatch({ type: "INIT_FOUNDATIONAL_HABITS" });
+  const initFoundationalTasks = async () => {
+    // This is handled automatically when loading tasks from the API
+    await loadTasks();
   };
 
-  const resetDailyHabits = () => {
-    console.log("resetDailyHabits called");
-    dispatch({ type: "RESET_DAILY_HABITS" });
+  const resetDailyTasks = async () => {
+    try {
+      console.log("🔄 Starting daily tasks reset...");
+      console.log("Current online status:", state.isOnline);
+      console.log("Current tasks count:", state.tasks.length);
+
+      dispatch({ type: "SET_LOADING", payload: true });
+      dispatch({ type: "SET_ERROR", payload: null });
+
+      if (!state.isOnline) {
+        // Reset locally if offline
+        console.log("📱 Offline mode: resetting locally");
+        dispatch({ type: "RESET_DAILY_TASKS_LOCAL" });
+        console.log("✅ Offline reset complete");
+        return;
+      }
+
+      console.log("🌐 Online mode: calling API reset");
+      const result = await apiClient.resetDay();
+      console.log("✅ API reset complete:", result);
+
+      console.log("🔄 Refreshing tasks from server...");
+      await refreshTasks();
+      console.log("✅ Tasks refreshed successfully");
+    } catch (error) {
+      console.error("❌ Failed to reset daily tasks:", error);
+      console.error("Error details:", {
+        message: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined,
+        type: typeof error,
+        isOnline: state.isOnline,
+      });
+
+      dispatch({
+        type: "SET_ERROR",
+        payload:
+          error instanceof Error
+            ? `Reset failed: ${error.message}`
+            : "Failed to reset daily tasks",
+      });
+    }
+  };
+
+  const refreshTasks = async () => {
+    await loadTasks();
   };
 
   const value: TaskContextType = {
@@ -192,8 +417,9 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     updateTask,
     deleteTask,
     toggleTask,
-    initFoundationalHabits,
-    resetDailyHabits,
+    initFoundationalTasks,
+    resetDailyTasks,
+    refreshTasks,
   };
 
   return <TaskContext.Provider value={value}>{children}</TaskContext.Provider>;

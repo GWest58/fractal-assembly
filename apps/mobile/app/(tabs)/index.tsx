@@ -2,23 +2,40 @@ import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
   Platform,
+  ActivityIndicator,
+  View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ThemedText } from "@/components/ThemedText";
+import {
+  ThemedText,
+  Title1,
+  Subheadline,
+  Caption1,
+} from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { AddTaskForm } from "@/components/tasks/AddTaskForm";
 import { TaskList } from "@/components/tasks/TaskList";
 import { FloatingActionButton } from "@/components/tasks/FloatingActionButton";
+import { Button, IconButton } from "@/components/ui/Button";
 import { useTask } from "@/contexts/TaskContext";
+import { useColorScheme } from "@/hooks/useColorScheme";
+import { Colors } from "@/constants/Colors";
+import {
+  Spacing,
+  BorderRadius,
+  Shadows,
+  Layout,
+} from "@/constants/DesignTokens";
 
 export default function HomeScreen() {
   const [isAddTaskModalVisible, setIsAddTaskModalVisible] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [debugInfo, setDebugInfo] = useState("");
-  const { resetDailyHabits, state } = useTask();
+  const { resetDailyTasks, refreshTasks, state } = useTask();
+  const insets = useSafeAreaInsets();
+  const colorScheme = useColorScheme();
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -43,16 +60,23 @@ export default function HomeScreen() {
       // Use native Alert for mobile
       const Alert = require("react-native").Alert;
       Alert.alert(
-        "Reset Daily Habits",
-        "This will mark all foundational habits as incomplete for a new day. Are you sure?",
+        "Reset Daily Tasks",
+        "This will mark all recurring tasks as incomplete for a new day. Are you sure?",
         [
           { text: "Cancel", style: "cancel" },
           {
             text: "Reset",
             style: "destructive",
-            onPress: () => {
-              resetDailyHabits();
-              Alert.alert("Success", "Daily habits have been reset!");
+            onPress: async () => {
+              try {
+                await resetDailyTasks();
+                Alert.alert("Success", "Daily tasks have been reset!");
+              } catch {
+                Alert.alert(
+                  "Error",
+                  "Failed to reset tasks. Please try again.",
+                );
+              }
             },
           },
         ],
@@ -60,48 +84,24 @@ export default function HomeScreen() {
     }
   };
 
-  const confirmReset = () => {
-    console.log(
-      "Web reset triggered - before reset:",
-      state.tasks.filter((t) => t.isFoundational),
-    );
-    resetDailyHabits();
-    setShowResetConfirm(false);
-    // Clear debug info and refresh it
-    setDebugInfo("");
-    // Add a brief success message for web
-    setTimeout(() => {
-      console.log(
-        "Web reset triggered - after reset:",
-        state.tasks.filter((t) => t.isFoundational),
-      );
-      debugState();
-    }, 100);
+  const confirmReset = async () => {
+    try {
+      await resetDailyTasks();
+      setShowResetConfirm(false);
+    } catch (error) {
+      console.error("Reset failed:", error);
+    }
   };
 
   const cancelReset = () => {
     setShowResetConfirm(false);
   };
 
-  const debugState = () => {
-    const habits = state.tasks.filter((t) => t.isFoundational);
-    const debugStr = habits
-      .map((h) => `${h.text}: ${h.completedToday ? "✅" : "⭕"}`)
-      .join(" | ");
-    setDebugInfo(
-      `${debugStr} | Total: ${habits.length}, Completed: ${completedToday.length}`,
-    );
-    console.log("Current foundational habits state:", habits);
-    console.log("Completed today count:", completedToday.length);
-  };
-
-  const foundationalHabits = state.tasks.filter((task) => task.isFoundational);
-  const completedToday = foundationalHabits.filter(
-    (task) => task.completedToday,
-  );
+  const recurringTasks = state.tasks.filter((task) => task.frequency);
+  const completedToday = recurringTasks.filter((task) => task.completedToday);
   const progressPercentage =
-    foundationalHabits.length > 0
-      ? Math.round((completedToday.length / foundationalHabits.length) * 100)
+    recurringTasks.length > 0
+      ? Math.round((completedToday.length / recurringTasks.length) * 100)
       : 0;
 
   const formatDate = (date: Date) => {
@@ -113,85 +113,267 @@ export default function HomeScreen() {
     });
   };
 
+  // Get greeting based on time
+  const getGreeting = () => {
+    const hour = currentDate.getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    return "Good evening";
+  };
+
   return (
     <ThemedView style={styles.container}>
-      <ThemedView style={styles.header}>
-        <ThemedView style={styles.headerTop}>
-          <ThemedView>
-            <ThemedText type="title">Foundational Habits</ThemedText>
-            <ThemedText style={styles.dateText}>
+      {/* Header Section */}
+      <ThemedView
+        style={[
+          styles.header,
+          {
+            paddingTop: insets.top + Spacing.lg,
+            backgroundColor: Colors[colorScheme ?? "light"].background,
+          },
+        ]}
+      >
+        <View style={styles.headerContent}>
+          <View style={styles.headerMain}>
+            <Title1 style={styles.greeting}>{getGreeting()}</Title1>
+            <Subheadline hierarchy="secondary" style={styles.dateText}>
               {formatDate(currentDate)}
-            </ThemedText>
-            <ThemedText style={styles.subtitle}>
-              Daily Progress: {completedToday.length}/
-              {foundationalHabits.length} ({progressPercentage}%)
-            </ThemedText>
-          </ThemedView>
-          <ThemedView style={styles.buttonGroup}>
-            <TouchableOpacity
-              onPress={handleDailyReset}
-              style={styles.resetButton}
+            </Subheadline>
+          </View>
+
+          {/* Connection Status */}
+          <View style={styles.statusContainer}>
+            <View
+              style={[
+                styles.statusDot,
+                {
+                  backgroundColor: state.isOnline
+                    ? Colors[colorScheme ?? "light"].success
+                    : Colors[colorScheme ?? "light"].error,
+                },
+              ]}
+            />
+            <Caption1 hierarchy="secondary">
+              {state.isOnline ? "Online" : "Offline"}
+            </Caption1>
+          </View>
+        </View>
+
+        {/* Progress Section */}
+        {recurringTasks.length > 0 && (
+          <View style={styles.progressSection}>
+            <View style={styles.progressHeader}>
+              <ThemedText type="headline">Today's Progress</ThemedText>
+              <View style={styles.progressActions}>
+                <IconButton
+                  onPress={refreshTasks}
+                  icon={<ThemedText style={styles.refreshIcon}>↻</ThemedText>}
+                  variant="ghost"
+                  size="small"
+                  disabled={state.loading}
+                />
+                <Button
+                  title="Reset Day"
+                  onPress={handleDailyReset}
+                  variant="tertiary"
+                  size="small"
+                  disabled={state.loading}
+                />
+              </View>
+            </View>
+
+            <View style={styles.progressStats}>
+              <View style={styles.progressCard}>
+                <ThemedText type="largeTitle" style={styles.progressNumber}>
+                  {completedToday.length}
+                </ThemedText>
+                <Caption1 hierarchy="secondary">Completed</Caption1>
+              </View>
+
+              <View style={styles.progressDivider} />
+
+              <View style={styles.progressCard}>
+                <ThemedText type="largeTitle" style={styles.progressNumber}>
+                  {recurringTasks.length - completedToday.length}
+                </ThemedText>
+                <Caption1 hierarchy="secondary">Remaining</Caption1>
+              </View>
+
+              <View style={styles.progressDivider} />
+
+              <View style={styles.progressCard}>
+                <ThemedText
+                  type="largeTitle"
+                  style={[
+                    styles.progressNumber,
+                    {
+                      color:
+                        progressPercentage >= 100
+                          ? Colors[colorScheme ?? "light"].success
+                          : Colors[colorScheme ?? "light"].primary,
+                    },
+                  ]}
+                >
+                  {progressPercentage}%
+                </ThemedText>
+                <Caption1 hierarchy="secondary">Complete</Caption1>
+              </View>
+            </View>
+
+            {/* Progress Bar */}
+            <View
+              style={[
+                styles.progressBarContainer,
+                {
+                  backgroundColor: Colors[colorScheme ?? "light"].gray5,
+                },
+              ]}
             >
-              <ThemedText style={styles.resetButtonText}>
-                🔄 Reset Day
-              </ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={debugState} style={styles.debugButton}>
-              <ThemedText style={styles.debugButtonText}>🐛 Debug</ThemedText>
-            </TouchableOpacity>
-          </ThemedView>
-        </ThemedView>
+              <View
+                style={[
+                  styles.progressBarFill,
+                  {
+                    width: `${progressPercentage}%`,
+                    backgroundColor:
+                      progressPercentage >= 100
+                        ? Colors[colorScheme ?? "light"].success
+                        : Colors[colorScheme ?? "light"].primary,
+                  },
+                ]}
+              />
+            </View>
+          </View>
+        )}
+
+        {/* Error Display */}
+        {state.error && (
+          <View
+            style={[
+              styles.errorContainer,
+              {
+                backgroundColor: Colors[colorScheme ?? "light"].error + "15",
+                borderColor: Colors[colorScheme ?? "light"].error + "30",
+              },
+            ]}
+          >
+            <ThemedText
+              type="footnote"
+              style={{
+                color: Colors[colorScheme ?? "light"].error,
+              }}
+            >
+              ⚠️ {state.error}
+            </ThemedText>
+          </View>
+        )}
       </ThemedView>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {debugInfo && (
-          <ThemedView style={styles.debugContainer}>
-            <ThemedText style={styles.debugText}>Debug: {debugInfo}</ThemedText>
-          </ThemedView>
+      {/* Content Section */}
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={[
+          styles.scrollContainer,
+          {
+            paddingBottom:
+              insets.bottom + Layout.floatingActionButton.bottomOffset,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Loading State */}
+        {state.loading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator
+              size="large"
+              color={Colors[colorScheme ?? "light"].primary}
+            />
+            <ThemedText
+              type="subheadline"
+              hierarchy="secondary"
+              style={styles.loadingText}
+            >
+              {state.isOnline ? "Syncing with server..." : "Loading tasks..."}
+            </ThemedText>
+          </View>
         )}
-        <TaskList
-          key={`tasklist-${state.tasks.length}-${completedToday.length}`}
-        />
+
+        {/* Tasks List */}
+        <TaskList />
+
+        {/* Empty State */}
+        {!state.loading && state.tasks.length === 0 && (
+          <View style={styles.emptyStateContainer}>
+            <ThemedText type="title2" style={styles.emptyStateTitle}>
+              No tasks yet
+            </ThemedText>
+            <ThemedText
+              type="body"
+              hierarchy="secondary"
+              style={styles.emptyStateDescription}
+            >
+              Create your first task to get started with your daily routine.
+            </ThemedText>
+            <Button
+              title="Create First Task"
+              onPress={openAddTaskModal}
+              variant="primary"
+              style={styles.emptyStateButton}
+            />
+          </View>
+        )}
       </ScrollView>
 
+      {/* Floating Action Button */}
       <FloatingActionButton onPress={openAddTaskModal} />
 
+      {/* Add Task Modal */}
       <AddTaskForm
         visible={isAddTaskModalVisible}
         onClose={closeAddTaskModal}
       />
 
-      {/* Web-compatible confirmation dialog */}
+      {/* Web Reset Confirmation Modal */}
       {showResetConfirm && (
-        <ThemedView style={styles.overlay}>
-          <ThemedView style={styles.confirmDialog}>
-            <ThemedText style={styles.confirmTitle}>
-              Reset Daily Habits
+        <View style={styles.overlay}>
+          <View
+            style={[
+              styles.confirmDialog,
+              {
+                backgroundColor: Colors[colorScheme ?? "light"].background,
+                borderColor: Colors[colorScheme ?? "light"].separator,
+              },
+            ]}
+          >
+            <ThemedText type="headline" style={styles.confirmTitle}>
+              Reset Daily Tasks
             </ThemedText>
-            <ThemedText style={styles.confirmMessage}>
-              This will mark all foundational habits as incomplete for a new
-              day. Are you sure?
+            <ThemedText
+              type="body"
+              hierarchy="secondary"
+              style={styles.confirmMessage}
+            >
+              This will mark all recurring tasks as incomplete for a new day.
+              Are you sure?
             </ThemedText>
-            <ThemedText style={styles.debugInfo}>
-              Current completed: {completedToday.length}/
-              {foundationalHabits.length}
-            </ThemedText>
-            <ThemedView style={styles.confirmButtons}>
-              <TouchableOpacity
+            <Caption1 hierarchy="tertiary" style={styles.confirmStats}>
+              Current: {completedToday.length}/{recurringTasks.length} completed
+            </Caption1>
+            <View style={styles.confirmButtons}>
+              <Button
+                title="Cancel"
                 onPress={cancelReset}
-                style={styles.cancelConfirmButton}
-              >
-                <ThemedText style={styles.cancelConfirmText}>Cancel</ThemedText>
-              </TouchableOpacity>
-              <TouchableOpacity
+                variant="secondary"
+                style={styles.confirmButton}
+              />
+              <Button
+                title="Reset"
                 onPress={confirmReset}
-                style={styles.resetConfirmButton}
-              >
-                <ThemedText style={styles.resetConfirmText}>Reset</ThemedText>
-              </TouchableOpacity>
-            </ThemedView>
-          </ThemedView>
-        </ThemedView>
+                variant="destructive"
+                style={styles.confirmButton}
+              />
+            </View>
+          </View>
+        </View>
       )}
     </ThemedView>
   );
@@ -200,72 +382,122 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "transparent",
   },
   header: {
-    padding: 20,
-    paddingTop: 60,
-    backgroundColor: "transparent",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e1e1e1",
+    paddingHorizontal: Layout.screenPadding,
+    paddingBottom: Spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  headerTop: {
+  headerContent: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
+    marginBottom: Spacing.lg,
   },
-  buttonGroup: {
-    flexDirection: "row",
-    gap: 8,
+  headerMain: {
+    flex: 1,
   },
-  resetButton: {
-    backgroundColor: "#FF6B35",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginTop: 4,
-  },
-  resetButtonText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  debugButton: {
-    backgroundColor: "#007AFF",
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginTop: 4,
-  },
-  debugButtonText: {
-    color: "white",
-    fontSize: 10,
-    fontWeight: "600",
-  },
-  debugContainer: {
-    backgroundColor: "#f0f0f0",
-    padding: 12,
-    margin: 16,
-    borderRadius: 8,
-  },
-  debugText: {
-    fontSize: 12,
-    color: "#333",
-    fontFamily: "monospace",
+  greeting: {
+    marginBottom: Spacing.xs,
   },
   dateText: {
-    fontSize: 14,
-    opacity: 0.7,
-    marginTop: 2,
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
-  subtitle: {
-    fontSize: 16,
-    opacity: 0.7,
-    marginTop: 4,
+  statusContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  progressSection: {
+    marginBottom: Spacing.md,
+  },
+  progressHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.md,
+  },
+  progressActions: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    alignItems: "center",
+  },
+  refreshIcon: {
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  progressStats: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.md,
+  },
+  progressCard: {
+    flex: 1,
+    alignItems: "center",
+  },
+  progressNumber: {
+    fontWeight: "700",
+    marginBottom: Spacing.xs,
+  },
+  progressDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: "#E5E5EA",
+    marginHorizontal: Spacing.md,
+  },
+  progressBarContainer: {
+    height: 6,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  progressBarFill: {
+    height: "100%",
+    borderRadius: 3,
+    transition: "width 0.3s ease",
+  },
+  errorContainer: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginTop: Spacing.md,
   },
   content: {
     flex: 1,
+  },
+  scrollContainer: {
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: Spacing.md,
+  },
+  loadingContainer: {
+    alignItems: "center",
+    padding: Spacing.xl,
+  },
+  loadingText: {
+    marginTop: Spacing.md,
+    textAlign: "center",
+  },
+  emptyStateContainer: {
+    alignItems: "center",
+    paddingVertical: Spacing.xxxl,
+    paddingHorizontal: Spacing.xl,
+  },
+  emptyStateTitle: {
+    textAlign: "center",
+    marginBottom: Spacing.md,
+  },
+  emptyStateDescription: {
+    textAlign: "center",
+    marginBottom: Spacing.xl,
+    lineHeight: 24,
+  },
+  emptyStateButton: {
+    minWidth: 200,
   },
   overlay: {
     position: "absolute",
@@ -273,75 +505,38 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
     justifyContent: "center",
     alignItems: "center",
     zIndex: 1000,
   },
   confirmDialog: {
-    backgroundColor: "white",
-    margin: 20,
-    padding: 24,
-    borderRadius: 12,
-    minWidth: 280,
+    margin: Spacing.lg,
+    padding: Spacing.xl,
+    borderRadius: BorderRadius.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    minWidth: 320,
     maxWidth: 400,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    ...Shadows.large,
   },
   confirmTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 12,
     textAlign: "center",
-    color: "#000",
+    marginBottom: Spacing.md,
   },
   confirmMessage: {
-    fontSize: 16,
-    marginBottom: 24,
     textAlign: "center",
-    color: "#666",
+    marginBottom: Spacing.md,
     lineHeight: 22,
+  },
+  confirmStats: {
+    textAlign: "center",
+    marginBottom: Spacing.xl,
   },
   confirmButtons: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
+    gap: Spacing.md,
   },
-  cancelConfirmButton: {
+  confirmButton: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
-  },
-  resetConfirmButton: {
-    flex: 1,
-    backgroundColor: "#dc3545",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-  },
-  cancelConfirmText: {
-    textAlign: "center",
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#6c757d",
-  },
-  resetConfirmText: {
-    textAlign: "center",
-    fontSize: 16,
-    fontWeight: "600",
-    color: "white",
-  },
-  debugInfo: {
-    fontSize: 12,
-    textAlign: "center",
-    color: "#999",
-    marginBottom: 12,
   },
 });

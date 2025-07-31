@@ -1,0 +1,35 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "Backend API for Fractal Assembly habit tracker",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "init-db": "node src/scripts/init-db.js",
+    "test": "jest --passWithNoTests"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "better-sqlite3": "^9.2.2",
+    "uuid": "^9.0.1",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "express-rate-limit": "^7.1.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "jest": "^30.0.5"
+  },
+  "keywords": [
+    "habit-tracker",
+    "api",
+    "express",
+    "sqlite"
+  ],
+  "author": "",
+  "license": "MIT",
+  "private": true
+}

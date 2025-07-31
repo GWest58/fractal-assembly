@@ -1,17 +1,42 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   StyleSheet,
   View,
   TextInput,
   TouchableOpacity,
   Modal,
-  Switch,
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
-import { ThemedText } from "@/components/ThemedText";
-import { ThemedView } from "@/components/ThemedView";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  ThemedText,
+  Title2,
+  Headline,
+  Body,
+  Callout,
+  Caption1,
+} from "@/components/ThemedText";
+import {
+  PrimaryButton,
+  SecondaryButton,
+  IconButton,
+} from "@/components/ui/Button";
 import { useTask } from "@/contexts/TaskContext";
-import { useThemeColor } from "@/hooks/useThemeColor";
-import { Text } from "react-native";
+import { useColorScheme } from "@/hooks/useColorScheme";
+import { Colors } from "@/constants/Colors";
+import {
+  Spacing,
+  BorderRadius,
+  Shadows,
+  Layout,
+  Typography,
+  ComponentSizes,
+} from "@/constants/DesignTokens";
+import { FrequencySelector } from "./FrequencySelector";
+import { TaskFrequency } from "@/types/Task";
 
 interface AddTaskFormProps {
   visible: boolean;
@@ -24,316 +49,544 @@ export const AddTaskForm: React.FC<AddTaskFormProps> = ({
 }) => {
   const { addTask } = useTask();
   const [taskText, setTaskText] = useState("");
-  const [isFoundational, setIsFoundational] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<
-    "health" | "wellness" | "productivity" | "personal" | undefined
-  >(undefined);
+  const [frequency, setFrequency] = useState<TaskFrequency | undefined>(
+    undefined,
+  );
+  const [showFrequencySelector, setShowFrequencySelector] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Theme colors
-  const backgroundColor = useThemeColor(
-    { light: "#ffffff", dark: "#1e1e1e" },
-    "background",
-  );
-  const textColor = useThemeColor({ light: "#000", dark: "#fff" }, "text");
-  const borderColor = useThemeColor({ light: "#e1e1e1", dark: "#333" }, "text");
-  const inputBackgroundColor = useThemeColor(
-    { light: "#ffffff", dark: "#000000" },
-    "background",
-  );
-  const closeButtonBg = useThemeColor(
-    { light: "#f5f5f5", dark: "#333" },
-    "background",
-  );
-  const placeholderColor = useThemeColor(
-    { light: "#999", dark: "#666" },
-    "text",
-  );
-  const headerBorderColor = useThemeColor(
-    { light: "#e1e1e1", dark: "#333" },
-    "text",
-  );
+  const insets = useSafeAreaInsets();
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? "light"];
 
-  const handleSubmit = () => {
-    if (taskText.trim()) {
-      addTask({
+  // Animations
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [visible]);
+
+  const handleSubmit = async () => {
+    if (!taskText.trim() || isSubmitting) return;
+
+    setIsSubmitting(true);
+
+    try {
+      await addTask({
         text: taskText.trim(),
-        isFoundational,
-        category: selectedCategory,
+        frequency: frequency,
       });
+
+      // Reset form
       setTaskText("");
-      setIsFoundational(false);
-      setSelectedCategory(undefined);
-      onClose();
+      setFrequency(undefined);
+
+      // Close modal with slight delay for better UX
+      setTimeout(() => {
+        onClose();
+        setIsSubmitting(false);
+      }, 100);
+    } catch (error) {
+      setIsSubmitting(false);
+      console.error("Failed to add task:", error);
     }
   };
+
+  const handleClose = () => {
+    if (isSubmitting) return;
+
+    // Reset form on close
+    setTaskText("");
+    setFrequency(undefined);
+    onClose();
+  };
+
+  const getFrequencyDisplayText = () => {
+    if (!frequency) return "One-time task";
+
+    switch (frequency.type) {
+      case "daily":
+        return frequency.time ? `Daily at ${frequency.time}` : "Daily";
+      case "specific_days":
+        const days = frequency.data.days?.join(", ") || "";
+        const timeStr = frequency.time ? ` at ${frequency.time}` : "";
+        return days ? `${days}${timeStr}` : "Select days";
+      case "times_per_week":
+        const weekTimeStr = frequency.time ? ` at ${frequency.time}` : "";
+        return `${frequency.data.count || 3}× per week${weekTimeStr}`;
+      case "times_per_month":
+        const monthTimeStr = frequency.time ? ` at ${frequency.time}` : "";
+        return `${frequency.data.count || 3}× per month${monthTimeStr}`;
+      default:
+        return "One-time task";
+    }
+  };
+
+  const getFrequencyIcon = () => {
+    if (!frequency) return "📝";
+    switch (frequency.type) {
+      case "daily":
+        return "🌅";
+      case "specific_days":
+        return "📅";
+      case "times_per_week":
+        return "📊";
+      case "times_per_month":
+        return "🗓️";
+      default:
+        return "📝";
+    }
+  };
+
+  const slideTransform = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [300, 0],
+  });
+
+  const isFormValid = taskText.trim().length > 0;
 
   return (
     <Modal
       visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
+      animationType="none"
+      presentationStyle="overFullScreen"
+      transparent
+      onRequestClose={handleClose}
     >
-      <ThemedView
-        style={[styles.modalContainer, { backgroundColor: backgroundColor }]}
+      <KeyboardAvoidingView
+        style={styles.modalOverlay}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <View style={[styles.header, { borderBottomColor: headerBorderColor }]}>
-          <ThemedText type="title" style={[styles.title, { color: "#007AFF" }]}>
-            Add New Task
-          </ThemedText>
+        {/* Backdrop */}
+        <Animated.View
+          style={[
+            styles.backdrop,
+            {
+              opacity: fadeAnim,
+            },
+          ]}
+        >
           <TouchableOpacity
-            onPress={onClose}
-            style={[styles.closeButton, { backgroundColor: closeButtonBg }]}
-          >
-            <ThemedText style={styles.closeButtonText}>✕</ThemedText>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.content}>
-          <TextInput
-            style={[
-              styles.textInput,
-              {
-                backgroundColor: inputBackgroundColor,
-                color: textColor,
-                borderColor: borderColor,
-              },
-            ]}
-            value={taskText}
-            onChangeText={setTaskText}
-            placeholder="Enter task description..."
-            placeholderTextColor={placeholderColor}
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-            autoFocus
+            style={styles.backdropTouch}
+            onPress={handleClose}
+            activeOpacity={1}
           />
+        </Animated.View>
 
-          <View style={styles.optionsContainer}>
+        {/* Modal Content */}
+        <Animated.View
+          style={[
+            styles.modalContainer,
+            {
+              backgroundColor: colors.background,
+              borderColor: colors.separator,
+              paddingBottom: Math.max(insets.bottom, Spacing.lg),
+              transform: [{ translateY: slideTransform }],
+            },
+          ]}
+        >
+          {/* Handle Bar */}
+          <View style={styles.handleContainer}>
             <View
-              style={[styles.switchContainer, { borderColor: borderColor }]}
-            >
-              <ThemedText style={styles.switchLabel}>
-                Foundational Habit
-              </ThemedText>
-              <Switch
-                value={isFoundational}
-                onValueChange={setIsFoundational}
-                trackColor={{ false: "#767577", true: "#FF6B35" }}
-                thumbColor={isFoundational ? "#fff" : "#f4f3f4"}
-              />
+              style={[
+                styles.handle,
+                {
+                  backgroundColor: colors.separator,
+                },
+              ]}
+            />
+          </View>
+
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerContent}>
+              <Title2 style={styles.title}>Add New Task</Title2>
+              <Caption1 hierarchy="secondary" style={styles.subtitle}>
+                Create a task to build better habits
+              </Caption1>
+            </View>
+            <IconButton
+              onPress={handleClose}
+              icon={
+                <ThemedText
+                  style={[styles.closeIcon, { color: colors.textSecondary }]}
+                >
+                  ✕
+                </ThemedText>
+              }
+              variant="ghost"
+              size="medium"
+              disabled={isSubmitting}
+            />
+          </View>
+
+          <ScrollView
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* Task Input Section */}
+            <View style={styles.section}>
+              <Headline style={styles.sectionTitle}>Task Description</Headline>
+              <View
+                style={[
+                  styles.inputContainer,
+                  {
+                    backgroundColor: colors.backgroundSecondary,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <TextInput
+                  style={[
+                    styles.textInput,
+                    {
+                      color: colors.text,
+                      ...Typography.body,
+                    },
+                  ]}
+                  value={taskText}
+                  onChangeText={setTaskText}
+                  placeholder="What would you like to accomplish?"
+                  placeholderTextColor={colors.textPlaceholder}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  autoFocus
+                  maxLength={500}
+                />
+              </View>
+              {taskText.length > 0 && (
+                <Caption1 hierarchy="secondary" style={styles.characterCount}>
+                  {taskText.length}/500 characters
+                </Caption1>
+              )}
             </View>
 
-            {isFoundational && (
-              <View style={styles.categoryContainer}>
-                <ThemedText style={styles.categoryLabel}>Category:</ThemedText>
-                <View style={styles.categoryButtons}>
-                  {(
-                    [
-                      { key: "health", label: "💊 Health", color: "#FF6B6B" },
-                      {
-                        key: "wellness",
-                        label: "🧘 Wellness",
-                        color: "#4ECDC4",
-                      },
-                      {
-                        key: "productivity",
-                        label: "📋 Productivity",
-                        color: "#45B7D1",
-                      },
-                      {
-                        key: "personal",
-                        label: "🛏️ Personal",
-                        color: "#96CEB4",
-                      },
-                    ] as const
-                  ).map((category) => (
-                    <TouchableOpacity
-                      key={category.key}
+            {/* Frequency Section */}
+            <View style={styles.section}>
+              <Headline style={styles.sectionTitle}>Frequency</Headline>
+              <TouchableOpacity
+                style={[
+                  styles.frequencySelector,
+                  {
+                    backgroundColor: colors.backgroundSecondary,
+                    borderColor: colors.border,
+                  },
+                ]}
+                onPress={() => setShowFrequencySelector(true)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.frequencyContent}>
+                  <View style={styles.frequencyMain}>
+                    <ThemedText style={styles.frequencyIcon}>
+                      {getFrequencyIcon()}
+                    </ThemedText>
+                    <View style={styles.frequencyTextContainer}>
+                      <Callout style={styles.frequencyText}>
+                        {getFrequencyDisplayText()}
+                      </Callout>
+                      <Caption1
+                        hierarchy="secondary"
+                        style={styles.frequencyHint}
+                      >
+                        {frequency
+                          ? "Tap to change"
+                          : "Choose when to repeat this task"}
+                      </Caption1>
+                    </View>
+                  </View>
+                  <ThemedText
+                    style={[
+                      styles.frequencyArrow,
+                      { color: colors.textTertiary },
+                    ]}
+                  >
+                    ›
+                  </ThemedText>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            {/* Task Preview */}
+            {isFormValid && (
+              <View style={styles.section}>
+                <Headline style={styles.sectionTitle}>Preview</Headline>
+                <View
+                  style={[
+                    styles.previewCard,
+                    {
+                      backgroundColor: colors.backgroundTertiary,
+                      borderColor: colors.separator,
+                    },
+                  ]}
+                >
+                  <View style={styles.previewHeader}>
+                    <View
                       style={[
-                        styles.categoryButton,
-                        selectedCategory === category.key && {
-                          backgroundColor: category.color,
+                        styles.previewCheckbox,
+                        {
+                          borderColor: colors.primary,
                         },
                       ]}
-                      onPress={() => setSelectedCategory(category.key)}
-                    >
-                      <Text
+                    />
+                    <View style={styles.previewContent}>
+                      <Body style={styles.previewText}>{taskText}</Body>
+                      {frequency && (
+                        <Caption1
+                          hierarchy="secondary"
+                          style={styles.previewFrequency}
+                        >
+                          {getFrequencyDisplayText()}
+                        </Caption1>
+                      )}
+                    </View>
+                    {frequency && (
+                      <View
                         style={[
-                          styles.categoryButtonText,
-                          selectedCategory === category.key && {
-                            color: "white",
+                          styles.previewBadge,
+                          {
+                            backgroundColor: colors.primary,
                           },
                         ]}
                       >
-                        {category.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                        <Caption1
+                          style={[
+                            styles.previewBadgeText,
+                            { color: "#FFFFFF" },
+                          ]}
+                        >
+                          {frequency.type === "daily" ? "DAILY" : "HABIT"}
+                        </Caption1>
+                      </View>
+                    )}
+                  </View>
                 </View>
               </View>
             )}
-          </View>
+          </ScrollView>
 
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity
+          {/* Action Buttons */}
+          <View style={styles.actionSection}>
+            <PrimaryButton
+              title={isSubmitting ? "Creating..." : "Create Task"}
               onPress={handleSubmit}
-              style={[
-                styles.addButton,
-                !taskText.trim() && styles.addButtonDisabled,
-              ]}
-              disabled={
-                !taskText.trim() || (isFoundational && !selectedCategory)
-              }
-            >
-              <Text style={styles.addButtonText}>
-                {isFoundational ? "Add Foundational Habit" : "Add Task"}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={[styles.cancelButton, { borderColor: borderColor }]}
-            >
-              <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
-            </TouchableOpacity>
+              disabled={!isFormValid || isSubmitting}
+              loading={isSubmitting}
+              fullWidth
+              style={styles.createButton}
+            />
+            <SecondaryButton
+              title="Cancel"
+              onPress={handleClose}
+              disabled={isSubmitting}
+              fullWidth
+              style={styles.cancelButton}
+            />
           </View>
-        </View>
-      </ThemedView>
+        </Animated.View>
+
+        {/* Frequency Selector Modal */}
+        <FrequencySelector
+          visible={showFrequencySelector}
+          onClose={() => setShowFrequencySelector(false)}
+          onSelect={(freq) => setFrequency(freq)}
+          initialFrequency={frequency}
+        />
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  modalContainer: {
+  modalOverlay: {
     flex: 1,
-    backgroundColor: "transparent",
+    justifyContent: "flex-end",
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+  },
+  backdropTouch: {
+    flex: 1,
+  },
+  modalContainer: {
+    borderTopLeftRadius: BorderRadius.xl,
+    borderTopRightRadius: BorderRadius.xl,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    maxHeight: "90%",
+    minHeight: "60%",
+    ...Shadows.large,
+  },
+  handleContainer: {
+    alignItems: "center",
+    paddingVertical: Spacing.sm,
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
   },
   header: {
     flexDirection: "row",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-    alignItems: "center",
-    padding: 20,
-    paddingTop: 60,
-    borderBottomWidth: 1,
+    paddingHorizontal: Layout.screenPadding,
+    paddingBottom: Spacing.lg,
   },
-  title: {
+  headerContent: {
     flex: 1,
   },
-  closeButton: {
-    padding: 10,
-    borderRadius: 22,
-    width: 44,
-    height: 44,
-    justifyContent: "center",
-    alignItems: "center",
+  title: {
+    marginBottom: Spacing.xs,
+    fontWeight: "700",
   },
-  closeButtonText: {
-    fontSize: 20,
-    fontWeight: "bold",
-    opacity: 0.8,
+  subtitle: {
+    lineHeight: 18,
+  },
+  closeIcon: {
+    fontSize: 18,
+    fontWeight: "600",
+    lineHeight: 24,
   },
   content: {
     flex: 1,
-    padding: 24,
+    paddingHorizontal: Layout.screenPadding,
+  },
+  section: {
+    marginBottom: Spacing.xl,
+  },
+  sectionTitle: {
+    marginBottom: Spacing.md,
+    fontWeight: "600",
+  },
+  inputContainer: {
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    padding: Spacing.md,
+    ...Shadows.small,
   },
   textInput: {
-    fontSize: 16,
-    lineHeight: 24,
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    minHeight: 120,
+    minHeight: 100,
     textAlignVertical: "top",
-    marginBottom: 24,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    padding: 0,
+    margin: 0,
   },
-  buttonContainer: {
-    gap: 16,
+  characterCount: {
+    marginTop: Spacing.sm,
+    textAlign: "right",
   },
-  addButton: {
-    backgroundColor: "#007AFF",
-    paddingVertical: 18,
-    paddingHorizontal: 24,
-    borderRadius: 12,
+  frequencySelector: {
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    padding: Spacing.lg,
+    ...Shadows.small,
+  },
+  frequencyContent: {
+    flexDirection: "row",
     alignItems: "center",
-    shadowColor: "#007AFF",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
+    justifyContent: "space-between",
   },
-  addButtonDisabled: {
-    backgroundColor: "gray",
+  frequencyMain: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
   },
-  addButtonText: {
-    color: "white",
-    fontSize: 17,
+  frequencyIcon: {
+    fontSize: 24,
+    marginRight: Spacing.md,
+  },
+  frequencyTextContainer: {
+    flex: 1,
+  },
+  frequencyText: {
+    marginBottom: Spacing.xs,
+    fontWeight: "500",
+  },
+  frequencyHint: {
+    fontStyle: "italic",
+  },
+  frequencyArrow: {
+    fontSize: 20,
     fontWeight: "600",
+  },
+  previewCard: {
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    padding: Spacing.lg,
+    ...Shadows.small,
+  },
+  previewHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: Spacing.md,
+  },
+  previewCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    marginTop: Spacing.xs,
+  },
+  previewContent: {
+    flex: 1,
+  },
+  previewText: {
+    marginBottom: Spacing.xs,
+    lineHeight: 22,
+  },
+  previewFrequency: {
+    fontStyle: "italic",
+  },
+  previewBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.round,
+    alignSelf: "flex-start",
+  },
+  previewBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  actionSection: {
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: Spacing.lg,
+    gap: Spacing.md,
+  },
+  createButton: {
+    minHeight: ComponentSizes.button.large,
   },
   cancelButton: {
-    backgroundColor: "transparent",
-    paddingVertical: 18,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    alignItems: "center",
-    borderWidth: 1.5,
-  },
-  cancelButtonText: {
-    opacity: 0.8,
-    fontSize: 17,
-    fontWeight: "600",
-  },
-  optionsContainer: {
-    marginBottom: 24,
-  },
-  switchContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    borderWidth: 1,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  switchLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  categoryContainer: {
-    marginBottom: 16,
-  },
-  categoryLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 12,
-  },
-  categoryButtons: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  categoryButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#e1e1e1",
-    backgroundColor: "#f9f9f9",
-  },
-  categoryButtonText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#333",
+    minHeight: ComponentSizes.button.medium,
   },
 });
