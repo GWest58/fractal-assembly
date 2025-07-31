@@ -1,9 +1,18 @@
 import React, { useState } from "react";
-import { StyleSheet, View, TouchableOpacity, TextInput } from "react-native";
-import { ThemedText } from "@/components/ThemedText";
-import { ThemedView } from "@/components/ThemedView";
+import {
+  StyleSheet,
+  View,
+  TouchableOpacity,
+  TextInput,
+  Animated,
+  Platform,
+} from "react-native";
+import { ThemedText, Body, Caption1, Caption2 } from "@/components/ThemedText";
+import { Button } from "@/components/ui/Button";
 import { useTask } from "@/contexts/TaskContext";
-import { useThemeColor } from "@/hooks/useThemeColor";
+import { useColorScheme } from "@/hooks/useColorScheme";
+import { Colors } from "@/constants/Colors";
+import { Spacing, BorderRadius } from "@/constants/DesignTokens";
 
 import { Task } from "@/types/Task";
 
@@ -16,28 +25,16 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(task.text);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [scaleAnim] = useState(new Animated.Value(1));
 
-  // Theme colors
-  const inputTextColor = useThemeColor({ light: "#000", dark: "#fff" }, "text");
-  const deleteConfirmBg = useThemeColor(
-    { light: "#fff3cd", dark: "#3a3a2a" },
-    "background",
-  );
-  const deleteConfirmBorder = useThemeColor(
-    { light: "#ffeaa7", dark: "#666" },
-    "text",
-  );
-  const deleteConfirmText = useThemeColor(
-    { light: "#856404", dark: "#d4c069" },
-    "text",
-  );
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? "light"];
+  const taskColors = TaskColors[colorScheme ?? "light"];
 
-  const handleToggle = () => {
-    toggleTask(task.id);
-  };
+  const isCompleted = task.frequency ? task.completedToday : task.completed;
 
   const getFrequencyDisplayText = () => {
-    if (!task.frequency) return "Daily";
+    if (!task.frequency) return "One-time";
 
     switch (task.frequency.type) {
       case "daily":
@@ -45,11 +42,11 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
       case "specific_days":
         return "Custom";
       case "times_per_week":
-        return `${task.frequency.data.count || 3}x/week`;
+        return `${task.frequency.data.count || 3}×/week`;
       case "times_per_month":
-        return `${task.frequency.data.count || 3}x/month`;
+        return `${task.frequency.data.count || 3}×/month`;
       default:
-        return "Daily";
+        return "One-time";
     }
   };
 
@@ -58,7 +55,9 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
 
     switch (task.frequency.type) {
       case "daily":
-        return task.frequency.time ? `Every day at ${task.frequency.time}` : "";
+        return task.frequency.time
+          ? `Every day at ${task.frequency.time}`
+          : "Every day";
       case "specific_days":
         const days = task.frequency.data.days?.join(", ") || "";
         const timeStr = task.frequency.time ? ` at ${task.frequency.time}` : "";
@@ -76,6 +75,24 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
       default:
         return "";
     }
+  };
+
+  const handleToggle = () => {
+    // Scale animation for tactile feedback
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    toggleTask(task.id);
   };
 
   const handleEdit = () => {
@@ -108,121 +125,189 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
     setShowDeleteConfirm(false);
   };
 
-  const isCompleted = task.frequency ? task.completedToday : task.completed;
-
-  return (
-    <ThemedView style={[styles.container, { borderBottomColor: borderColor }]}>
-      <TouchableOpacity onPress={handleToggle} style={styles.checkbox}>
-        <ThemedView
-          style={[styles.checkboxInner, isCompleted && styles.checkboxChecked]}
+  const renderCheckbox = () => (
+    <TouchableOpacity
+      onPress={handleToggle}
+      style={styles.checkboxContainer}
+      activeOpacity={0.7}
+    >
+      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        <View
+          style={[
+            styles.checkbox,
+            {
+              borderColor: isCompleted
+                ? taskColors.checkboxChecked
+                : taskColors.checkboxBorder,
+              backgroundColor: isCompleted
+                ? taskColors.checkboxChecked
+                : "transparent",
+            },
+          ]}
         >
           {isCompleted && <ThemedText style={styles.checkmark}>✓</ThemedText>}
-        </ThemedView>
-      </TouchableOpacity>
+        </View>
+      </Animated.View>
+    </TouchableOpacity>
+  );
 
-      <View style={styles.content}>
-        {isEditing ? (
-          <View style={styles.editContainer}>
-            <TextInput
-              style={[
-                styles.textInput,
-                {
-                  borderColor: borderColor,
-                  backgroundColor: inputBackgroundColor,
-                  color: inputTextColor,
-                },
-              ]}
-              value={editText}
-              onChangeText={setEditText}
-              onSubmitEditing={handleSave}
-              autoFocus
-              multiline
+  const renderFrequencyBadge = () => {
+    if (!task.frequency) return null;
+
+    return (
+      <View
+        style={[
+          styles.frequencyBadge,
+          {
+            backgroundColor: taskColors.frequencyBadge,
+          },
+        ]}
+      >
+        <Caption2 style={[styles.frequencyBadgeText, { color: "#FFFFFF" }]}>
+          {getFrequencyDisplayText()}
+        </Caption2>
+      </View>
+    );
+  };
+
+  const renderTaskContent = () => {
+    if (isEditing) {
+      return (
+        <View style={styles.editContainer}>
+          <TextInput
+            style={[
+              styles.textInput,
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.backgroundSecondary,
+                color: colors.text,
+                ...Typography.body,
+              },
+            ]}
+            value={editText}
+            onChangeText={setEditText}
+            onSubmitEditing={handleSave}
+            autoFocus
+            multiline
+            placeholder="Enter task description..."
+            placeholderTextColor={colors.textPlaceholder}
+          />
+          <View style={styles.editActions}>
+            <Button
+              title="Save"
+              onPress={handleSave}
+              variant="primary"
+              size="small"
+              style={styles.editButton}
             />
-            <View style={styles.editButtons}>
-              <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
-                <ThemedText style={styles.buttonText}>Save</ThemedText>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleCancel}
-                style={styles.cancelButton}
+            <Button
+              title="Cancel"
+              onPress={handleCancel}
+              variant="secondary"
+              size="small"
+              style={styles.editButton}
+            />
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.taskContent}>
+        <View style={styles.taskHeader}>
+          <View style={styles.taskInfo}>
+            <TouchableOpacity onPress={handleEdit} activeOpacity={0.7}>
+              <Body
+                style={[styles.taskText, isCompleted && styles.completedText]}
               >
-                <ThemedText style={styles.buttonText}>Cancel</ThemedText>
-              </TouchableOpacity>
+                {task.text}
+              </Body>
+            </TouchableOpacity>
+
+            {task.frequency && (
+              <Caption1 hierarchy="secondary" style={styles.frequencyDetail}>
+                {getDetailedFrequencyText()}
+              </Caption1>
+            )}
+          </View>
+
+          {renderFrequencyBadge()}
+        </View>
+
+        {showDeleteConfirm ? (
+          <View
+            style={[
+              styles.deleteConfirmContainer,
+              {
+                backgroundColor: colors.error + "10",
+                borderColor: colors.error + "30",
+              },
+            ]}
+          >
+            <Caption1
+              style={[styles.deleteConfirmText, { color: colors.error }]}
+            >
+              Delete this task permanently?
+            </Caption1>
+            <View style={styles.deleteConfirmActions}>
+              <Button
+                title="Delete"
+                onPress={confirmDelete}
+                variant="destructive"
+                size="small"
+                style={styles.deleteConfirmButton}
+              />
+              <Button
+                title="Cancel"
+                onPress={cancelDelete}
+                variant="secondary"
+                size="small"
+                style={styles.deleteConfirmButton}
+              />
             </View>
           </View>
         ) : (
-          <View style={styles.displayContainer}>
-            <View style={styles.taskHeader}>
-              <ThemedText
-                style={[styles.taskText, isCompleted && styles.completedText]}
-                onPress={handleEdit}
-              >
-                {task.text}
-              </ThemedText>
-              {task.frequency && (
-                <ThemedText style={styles.frequencyBadge}>
-                  {getFrequencyDisplayText()}
-                </ThemedText>
-              )}
-            </View>
-            {task.frequency && (
-              <ThemedText style={styles.frequencyText}>
-                {getDetailedFrequencyText()}
-              </ThemedText>
-            )}
-            {showDeleteConfirm ? (
-              <View
-                style={[
-                  styles.deleteConfirmContainer,
-                  {
-                    backgroundColor: deleteConfirmBg,
-                    borderColor: deleteConfirmBorder,
-                  },
-                ]}
-              >
-                <ThemedText
-                  style={[
-                    styles.deleteConfirmText,
-                    { color: deleteConfirmText },
-                  ]}
-                >
-                  Delete this task?
-                </ThemedText>
-                <View style={styles.deleteConfirmButtons}>
-                  <TouchableOpacity
-                    onPress={confirmDelete}
-                    style={styles.confirmDeleteButton}
-                  >
-                    <ThemedText style={styles.buttonText}>Delete</ThemedText>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={cancelDelete}
-                    style={styles.cancelDeleteButton}
-                  >
-                    <ThemedText style={styles.buttonText}>Cancel</ThemedText>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              <View style={styles.actions}>
-                <TouchableOpacity
-                  onPress={handleEdit}
-                  style={styles.editButton}
-                >
-                  <ThemedText style={styles.actionText}>Edit</ThemedText>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={handleDelete}
-                  style={styles.deleteButton}
-                >
-                  <ThemedText style={styles.actionText}>Delete</ThemedText>
-                </TouchableOpacity>
-              </View>
-            )}
+          <View style={styles.taskActions}>
+            <TouchableOpacity
+              onPress={handleEdit}
+              style={styles.actionButton}
+              activeOpacity={0.7}
+            >
+              <Caption1 style={[styles.actionText, { color: colors.link }]}>
+                Edit
+              </Caption1>
+            </TouchableOpacity>
+
+            <View style={styles.actionDivider} />
+
+            <TouchableOpacity
+              onPress={handleDelete}
+              style={styles.actionButton}
+              activeOpacity={0.7}
+            >
+              <Caption1 style={[styles.actionText, { color: colors.error }]}>
+                Delete
+              </Caption1>
+            </TouchableOpacity>
           </View>
         )}
       </View>
-    </ThemedView>
+    );
+  };
+
+  return (
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.background,
+          borderBottomColor: colors.separator,
+        },
+      ]}
+    >
+      {renderCheckbox()}
+      {renderTaskContent()}
+    </View>
   );
 };
 
@@ -230,146 +315,131 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "flex-start",
-    padding: 16,
-    borderBottomWidth: 1,
-    backgroundColor: "transparent",
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    minHeight: 72,
+  },
+  checkboxContainer: {
+    marginRight: Spacing.md,
+    marginTop: Spacing.xs,
   },
   checkbox: {
-    marginRight: 12,
-    marginTop: 2,
-  },
-  checkboxInner: {
     width: 24,
     height: 24,
     borderWidth: 2,
-    borderColor: "#007AFF",
-    borderRadius: 4,
+    borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "transparent",
-  },
-
-  checkboxChecked: {
-    backgroundColor: "#007AFF",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 1,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
   },
   checkmark: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 16,
   },
-  content: {
-    flex: 1,
-  },
-  displayContainer: {
+  taskContent: {
     flex: 1,
   },
   taskHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
+  },
+  taskInfo: {
+    flex: 1,
+    marginRight: Spacing.md,
   },
   taskText: {
-    fontSize: 16,
     lineHeight: 22,
-    flex: 1,
-  },
-  frequencyBadge: {
-    backgroundColor: "#007AFF",
-    color: "#ffffff",
-    fontSize: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    fontWeight: "600",
-    marginLeft: 8,
+    marginBottom: Spacing.xs,
   },
   completedText: {
     textDecorationLine: "line-through",
-    opacity: 0.7,
+    opacity: 0.6,
   },
-  actions: {
+  frequencyDetail: {
+    fontStyle: "italic",
+    lineHeight: 16,
+  },
+  frequencyBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.round,
+    alignSelf: "flex-start",
+  },
+  frequencyBadgeText: {
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  taskActions: {
     flexDirection: "row",
-    gap: 12,
+    alignItems: "center",
+    marginTop: Spacing.xs,
   },
-  editButton: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  deleteButton: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+  actionButton: {
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
   },
   actionText: {
-    fontSize: 14,
-    color: "#007AFF",
+    fontWeight: "500",
+  },
+  actionDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: "#C6C6C8",
+    marginHorizontal: Spacing.sm,
   },
   editContainer: {
     flex: 1,
   },
   textInput: {
-    fontSize: 16,
-    lineHeight: 22,
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    marginBottom: Spacing.md,
     minHeight: 80,
     textAlignVertical: "top",
   },
-  editButtons: {
+  editActions: {
     flexDirection: "row",
-    gap: 12,
+    gap: Spacing.sm,
   },
-  saveButton: {
-    backgroundColor: "#007AFF",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-  },
-  cancelButton: {
-    backgroundColor: "#666",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-  },
-  buttonText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "600",
+  editButton: {
+    flex: 1,
   },
   deleteConfirmContainer: {
-    padding: 12,
-    borderRadius: 8,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
     borderWidth: 1,
-    marginTop: 8,
+    marginTop: Spacing.sm,
   },
   deleteConfirmText: {
-    fontSize: 14,
-    marginBottom: 12,
     textAlign: "center",
+    marginBottom: Spacing.sm,
+    fontWeight: "500",
   },
-  deleteConfirmButtons: {
+  deleteConfirmActions: {
     flexDirection: "row",
     justifyContent: "center",
-    gap: 12,
+    gap: Spacing.sm,
   },
-  confirmDeleteButton: {
-    backgroundColor: "#dc3545",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-  },
-  cancelDeleteButton: {
-    backgroundColor: "#6c757d",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-  },
-  frequencyText: {
-    fontSize: 12,
-    opacity: 0.8,
-    marginTop: 4,
-    fontStyle: "italic",
+  deleteConfirmButton: {
+    paddingHorizontal: Spacing.lg,
   },
 });

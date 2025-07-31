@@ -26,6 +26,7 @@ const API_BASE_URL = getApiBaseUrl();
 export interface Task {
   id: string;
   text: string;
+  completed?: boolean;
   completedToday: boolean;
   lastCompletedAt?: string;
   createdAt: string;
@@ -138,6 +139,7 @@ class ApiClient {
     id: string,
     updates: {
       text?: string;
+      completed?: boolean;
       frequency?: {
         type: string;
         data: Record<string, unknown>;

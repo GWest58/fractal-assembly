@@ -131,6 +131,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
   const convertApiTaskToTask = (apiTask: {
     id: string;
     text: string;
+    completed?: boolean;
     completedToday?: boolean;
     frequency?: {
       type: string;
@@ -143,8 +144,11 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
   }): Task => ({
     id: apiTask.id,
     text: apiTask.text,
-    completed: apiTask.completedToday || false,
-    completedToday: apiTask.completedToday || false,
+    completed: apiTask.completed || false,
+    completedToday:
+      apiTask.frequency === null
+        ? apiTask.completed || false
+        : apiTask.completedToday || false,
     frequency: apiTask.frequency,
     createdAt: new Date(apiTask.createdAt),
     updatedAt: new Date(apiTask.updatedAt),
@@ -267,6 +271,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       const apiTask = await apiClient.updateTask(input.id, {
         text: input.text,
         frequency: input.frequency,
+        completed: input.completed,
       });
 
       const updatedTask = convertApiTaskToTask(apiTask);
@@ -335,6 +340,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         // For one-time tasks, update via the update API
         await updateTask({
           id,
+          text: task.text,
           completed: !task.completed,
         });
       }

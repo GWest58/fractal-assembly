@@ -22,17 +22,6 @@ export const TaskList: React.FC = () => {
   const completedOneTime = oneTimeTasks.filter((task) => task.completed);
   const pendingOneTime = oneTimeTasks.filter((task) => !task.completed);
 
-  if (tasks.length === 0) {
-    return (
-      <ThemedView style={styles.emptyContainer}>
-        <ThemedText style={styles.emptyText}>No tasks yet</ThemedText>
-        <ThemedText style={styles.emptySubtext}>
-          Add your first task to get started!
-        </ThemedText>
-      </ThemedView>
-    );
-  }
-
   return (
     <ThemedView style={styles.container}>
       {/* Recurring Tasks Section */}
@@ -134,24 +123,7 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     marginTop: 12,
   },
-  emptyContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 32,
-    backgroundColor: "transparent",
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  emptySubtext: {
-    fontSize: 14,
-    opacity: 0.7,
-    textAlign: "center",
-  },
+
   stats: {
     padding: 16,
     borderTopWidth: 1,

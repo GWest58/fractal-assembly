@@ -5,13 +5,15 @@ class Task {
   constructor(data) {
     this.id = data.id;
     this.text = data.text;
+    this.completed = Boolean(data.completed);
     this.createdAt = data.created_at || data.createdAt;
     this.updatedAt = data.updated_at || data.updatedAt;
     this.frequency = this._parseFrequency(data);
   }
 
   _parseFrequency(data) {
-    const frequencyType = data.frequency_type || "daily";
+    // Don't default to "daily" - null/undefined frequency_type means one-time task
+    const frequencyType = data.frequency_type;
     let frequencyData = {};
 
     try {
@@ -20,6 +22,11 @@ class Task {
         : {};
     } catch {
       frequencyData = {};
+    }
+
+    // If no frequency type, return null for one-time tasks
+    if (!frequencyType) {
+      return null;
     }
 
     return {
@@ -59,18 +66,19 @@ class Task {
 
   static async create(data) {
     const id = data.id || uuidv4();
-    const frequency = data.frequency || { type: "daily", data: {}, time: null };
+    const frequency = data.frequency; // Don't default to daily for one-time tasks
 
     const sql = `
-      INSERT INTO tasks (id, text, frequency_type, frequency_data, frequency_time)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO tasks (id, text, frequency_type, frequency_data, frequency_time, completed)
+      VALUES (?, ?, ?, ?, ?, ?)
     `;
     const params = [
       id,
       data.text,
-      frequency.type,
-      JSON.stringify(frequency.data),
-      frequency.time,
+      frequency ? frequency.type : null,
+      frequency ? JSON.stringify(frequency.data) : null,
+      frequency ? frequency.time : null,
+      data.completed ? 1 : 0,
     ];
 
     await database.run(sql, params);
@@ -84,13 +92,18 @@ class Task {
     `;
     let params = [data.text];
 
-    if (data.frequency) {
+    if (data.frequency !== undefined) {
       sql += `, frequency_type = ?, frequency_data = ?, frequency_time = ?`;
       params.push(
-        data.frequency.type,
-        JSON.stringify(data.frequency.data),
-        data.frequency.time,
+        data.frequency ? data.frequency.type : null,
+        data.frequency ? JSON.stringify(data.frequency.data) : null,
+        data.frequency ? data.frequency.time : null,
       );
+    }
+
+    if (data.completed !== undefined) {
+      sql += `, completed = ?`;
+      params.push(data.completed ? 1 : 0);
     }
 
     sql += ` WHERE id = ?`;
@@ -196,17 +209,26 @@ class Task {
     // Filter tasks based on their frequency and return with status
     return tasks
       .filter((task) => task.isActiveOnDate(date))
-      .map((task) => ({
-        id: task.id,
-        text: task.text,
-        completedToday: Boolean(
-          rows.find((r) => r.id === task.id)?.completed_today,
-        ),
-        lastCompletedAt: rows.find((r) => r.id === task.id)?.last_completed_at,
-        createdAt: task.createdAt,
-        updatedAt: task.updatedAt,
-        frequency: task.frequency,
-      }));
+      .map((task) => {
+        const taskRow = rows.find((r) => r.id === task.id);
+
+        // For one-time tasks, use the completed field instead of completion tracking
+        const completedToday =
+          task.frequency === null
+            ? task.completed
+            : Boolean(taskRow?.completed_today);
+
+        return {
+          id: task.id,
+          text: task.text,
+          completed: task.completed, // Add completed field for one-time tasks
+          completedToday: completedToday,
+          lastCompletedAt: taskRow?.last_completed_at,
+          createdAt: task.createdAt,
+          updatedAt: task.updatedAt,
+          frequency: task.frequency,
+        };
+      });
   }
 
   static async getStreakForTask(taskId) {
@@ -270,6 +292,11 @@ class Task {
 
   // Frequency checking methods
   isActiveOnDate(date = new Date()) {
+    // One-time tasks are always active (no frequency restrictions)
+    if (!this.frequency) {
+      return true;
+    }
+
     const { type, data } = this.frequency;
     const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
     const dayNames = [
@@ -316,6 +343,9 @@ class Task {
   shouldShowNotification(date = new Date()) {
     if (!this.isActiveOnDate(date)) return false;
 
+    // One-time tasks don't have scheduled notifications
+    if (!this.frequency) return false;
+
     if (this.frequency.time) {
       const [hours, minutes] = this.frequency.time.split(":").map(Number);
       const notificationTime = new Date(date);
@@ -361,6 +391,7 @@ class Task {
     return {
       id: this.id,
       text: this.text,
+      completed: this.completed,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       frequency: this.frequency,

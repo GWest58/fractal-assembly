@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   StyleSheet,
   View,
@@ -6,11 +6,34 @@ import {
   Modal,
   ScrollView,
   Switch,
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import { ThemedText } from "@/components/ThemedText";
-import { ThemedView } from "@/components/ThemedView";
-import { useThemeColor } from "@/hooks/useThemeColor";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  ThemedText,
+  Title2,
+  Headline,
+  Body,
+  Callout,
+  Caption1,
+  Caption2,
+} from "@/components/ThemedText";
+import {
+  PrimaryButton,
+  SecondaryButton,
+  IconButton,
+} from "@/components/ui/Button";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import { Colors } from "@/constants/Colors";
+import {
+  Spacing,
+  BorderRadius,
+  Shadows,
+  Layout,
+  ComponentSizes,
+} from "@/constants/DesignTokens";
 import {
   FrequencyType,
   TaskFrequency,
@@ -21,41 +44,50 @@ import {
 interface FrequencySelectorProps {
   visible: boolean;
   onClose: () => void;
-  onSelect: (frequency: TaskFrequency) => void;
+  onSelect: (frequency: TaskFrequency | undefined) => void;
   initialFrequency?: TaskFrequency;
 }
 
-const DAYS_OF_WEEK: { key: DayOfWeek; label: string }[] = [
-  { key: "monday", label: "Monday" },
-  { key: "tuesday", label: "Tuesday" },
-  { key: "wednesday", label: "Wednesday" },
-  { key: "thursday", label: "Thursday" },
-  { key: "friday", label: "Friday" },
-  { key: "saturday", label: "Saturday" },
-  { key: "sunday", label: "Sunday" },
+const DAYS_OF_WEEK: { key: DayOfWeek; label: string; short: string }[] = [
+  { key: "monday", label: "Monday", short: "Mon" },
+  { key: "tuesday", label: "Tuesday", short: "Tue" },
+  { key: "wednesday", label: "Wednesday", short: "Wed" },
+  { key: "thursday", label: "Thursday", short: "Thu" },
+  { key: "friday", label: "Friday", short: "Fri" },
+  { key: "saturday", label: "Saturday", short: "Sat" },
+  { key: "sunday", label: "Sunday", short: "Sun" },
 ];
 
 const FREQUENCY_OPTIONS: {
   key: FrequencyType | "once";
   label: string;
   description: string;
+  icon: string;
 }[] = [
-  { key: "once", label: "One-time", description: "Complete once and done" },
-  { key: "daily", label: "Daily", description: "Every day" },
+  {
+    key: "once",
+    label: "One-time",
+    description: "Complete once and done",
+    icon: "📝",
+  },
+  { key: "daily", label: "Daily", description: "Every day", icon: "🌅" },
   {
     key: "specific_days",
     label: "Specific Days",
     description: "Choose which days",
+    icon: "📅",
   },
   {
     key: "times_per_week",
     label: "Times per Week",
     description: "X times each week",
+    icon: "📊",
   },
   {
     key: "times_per_month",
     label: "Times per Month",
     description: "X times each month",
+    icon: "🗓️",
   },
 ];
 
@@ -79,17 +111,43 @@ export const FrequencySelector: React.FC<FrequencySelectorProps> = ({
     initialFrequency?.time || "09:00",
   );
 
-  // Theme colors
-  const backgroundColor = useThemeColor(
-    { light: "#ffffff", dark: "#1e1e1e" },
-    "background",
-  );
-
-  const borderColor = useThemeColor({ light: "#e1e1e1", dark: "#333" }, "text");
-  const primaryColor = "#007AFF";
-  const secondaryColor = "#FF6B35";
+  const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const colors = Colors[colorScheme ?? "light"];
+
+  // Animations
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [visible]);
 
   const toggleDay = (day: DayOfWeek) => {
     setSelectedDays((prev) =>
@@ -122,7 +180,7 @@ export const FrequencySelector: React.FC<FrequencySelectorProps> = ({
 
   const handleSave = () => {
     if (selectedType === "once") {
-      onSelect(undefined); // No frequency for one-time tasks
+      onSelect(undefined);
       onClose();
       return;
     }
@@ -158,24 +216,25 @@ export const FrequencySelector: React.FC<FrequencySelectorProps> = ({
       case "daily":
         return hasTime ? `Every day at ${selectedTime}` : "Every day";
       case "specific_days":
-        const dayLabels = selectedDays.map(
-          (day) => DAYS_OF_WEEK.find((d) => d.key === day)?.label,
-        );
+        if (selectedDays.length === 0) return "Select days";
+        const dayLabels = selectedDays
+          .map((day) => DAYS_OF_WEEK.find((d) => d.key === day)?.short)
+          .filter(Boolean);
         const timeStr = hasTime ? ` at ${selectedTime}` : "";
         return `${dayLabels.join(", ")}${timeStr}`;
       case "times_per_week":
         const weekTimeStr = hasTime ? ` at ${selectedTime}` : "";
-        return `${timesCount} times per week${weekTimeStr}`;
+        return `${timesCount}× per week${weekTimeStr}`;
       case "times_per_month":
         const monthTimeStr = hasTime ? ` at ${selectedTime}` : "";
-        return `${timesCount} times per month${monthTimeStr}`;
+        return `${timesCount}× per month${monthTimeStr}`;
       default:
         return "";
     }
   };
 
   const isValidSelection = () => {
-    if (selectedType === "once") {
+    if (selectedType === "once" || selectedType === "daily") {
       return true;
     }
     if (selectedType === "specific_days") {
@@ -184,389 +243,603 @@ export const FrequencySelector: React.FC<FrequencySelectorProps> = ({
     return true;
   };
 
+  const slideTransform = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [300, 0],
+  });
+
+  const renderFrequencyOptions = () => (
+    <View style={styles.section}>
+      <Headline style={styles.sectionTitle}>Frequency Type</Headline>
+      <View style={styles.optionsGrid}>
+        {FREQUENCY_OPTIONS.map((option) => {
+          const isSelected = selectedType === option.key;
+          return (
+            <TouchableOpacity
+              key={option.key}
+              style={[
+                styles.frequencyOption,
+                {
+                  backgroundColor: isSelected
+                    ? colors.primary + "15"
+                    : colors.backgroundSecondary,
+                  borderColor: isSelected ? colors.primary : colors.border,
+                },
+              ]}
+              onPress={() => setSelectedType(option.key)}
+              activeOpacity={0.7}
+            >
+              <ThemedText style={styles.optionIcon}>{option.icon}</ThemedText>
+              <Callout
+                style={[
+                  styles.optionLabel,
+                  { color: isSelected ? colors.primary : colors.text },
+                ]}
+              >
+                {option.label}
+              </Callout>
+              <Caption1 hierarchy="secondary" style={styles.optionDescription}>
+                {option.description}
+              </Caption1>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+
+  const renderSpecificDaysSelector = () => {
+    if (selectedType !== "specific_days") return null;
+
+    return (
+      <View style={styles.section}>
+        <Headline style={styles.sectionTitle}>Select Days</Headline>
+        <View style={styles.daysGrid}>
+          {DAYS_OF_WEEK.map((day) => {
+            const isSelected = selectedDays.includes(day.key);
+            return (
+              <TouchableOpacity
+                key={day.key}
+                style={[
+                  styles.dayButton,
+                  {
+                    backgroundColor: isSelected
+                      ? colors.primary
+                      : colors.backgroundSecondary,
+                    borderColor: isSelected ? colors.primary : colors.border,
+                  },
+                ]}
+                onPress={() => toggleDay(day.key)}
+                activeOpacity={0.7}
+              >
+                <Caption2
+                  style={[
+                    styles.dayShort,
+                    { color: isSelected ? "#FFFFFF" : colors.text },
+                  ]}
+                >
+                  {day.short}
+                </Caption2>
+                <Caption1
+                  style={[
+                    styles.dayLabel,
+                    { color: isSelected ? "#FFFFFF" : colors.textSecondary },
+                  ]}
+                >
+                  {day.label}
+                </Caption1>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
+  const renderCountSelector = () => {
+    if (selectedType !== "times_per_week" && selectedType !== "times_per_month")
+      return null;
+
+    const unitLabel =
+      selectedType === "times_per_week" ? "per week" : "per month";
+
+    return (
+      <View style={styles.section}>
+        <Headline style={styles.sectionTitle}>How Many Times</Headline>
+        <View
+          style={[
+            styles.countSelector,
+            {
+              backgroundColor: colors.backgroundSecondary,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <IconButton
+            onPress={() => handleTimeCountChange(false)}
+            icon={
+              <ThemedText style={[styles.countButton, { color: colors.text }]}>
+                −
+              </ThemedText>
+            }
+            variant="ghost"
+            size="small"
+            disabled={timesCount <= 1}
+          />
+          <View style={styles.countDisplay}>
+            <ThemedText type="title3" style={styles.countNumber}>
+              {timesCount}
+            </ThemedText>
+            <Caption1 hierarchy="secondary" style={styles.countUnit}>
+              {unitLabel}
+            </Caption1>
+          </View>
+          <IconButton
+            onPress={() => handleTimeCountChange(true)}
+            icon={
+              <ThemedText style={[styles.countButton, { color: colors.text }]}>
+                +
+              </ThemedText>
+            }
+            variant="ghost"
+            size="small"
+            disabled={timesCount >= 31}
+          />
+        </View>
+      </View>
+    );
+  };
+
+  const renderTimeSelector = () => {
+    if (selectedType === "once") return null;
+
+    return (
+      <View style={styles.section}>
+        <View style={styles.timeSectionHeader}>
+          <Headline style={styles.sectionTitle}>Specific Time</Headline>
+          <Switch
+            value={hasTime}
+            onValueChange={setHasTime}
+            trackColor={{
+              false: colors.gray5,
+              true: colors.primary + "40",
+            }}
+            thumbColor={hasTime ? colors.primary : colors.gray3}
+          />
+        </View>
+
+        {hasTime && (
+          <View
+            style={[
+              styles.timeSelector,
+              {
+                backgroundColor: colors.backgroundSecondary,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            {/* Hour Selector */}
+            <View style={styles.timeUnit}>
+              <IconButton
+                onPress={() => handleTimeChange(true, "hour")}
+                icon={
+                  <ThemedText
+                    style={[styles.timeButton, { color: colors.text }]}
+                  >
+                    ▲
+                  </ThemedText>
+                }
+                variant="ghost"
+                size="small"
+              />
+              <ThemedText type="title2" style={styles.timeValue}>
+                {selectedTime.split(":")[0]}
+              </ThemedText>
+              <IconButton
+                onPress={() => handleTimeChange(false, "hour")}
+                icon={
+                  <ThemedText
+                    style={[styles.timeButton, { color: colors.text }]}
+                  >
+                    ▼
+                  </ThemedText>
+                }
+                variant="ghost"
+                size="small"
+              />
+              <Caption1 hierarchy="secondary" style={styles.timeLabel}>
+                Hour
+              </Caption1>
+            </View>
+
+            <ThemedText type="title2" style={styles.timeSeparator}>
+              :
+            </ThemedText>
+
+            {/* Minute Selector */}
+            <View style={styles.timeUnit}>
+              <IconButton
+                onPress={() => handleTimeChange(true, "minute")}
+                icon={
+                  <ThemedText
+                    style={[styles.timeButton, { color: colors.text }]}
+                  >
+                    ▲
+                  </ThemedText>
+                }
+                variant="ghost"
+                size="small"
+              />
+              <ThemedText type="title2" style={styles.timeValue}>
+                {selectedTime.split(":")[1]}
+              </ThemedText>
+              <IconButton
+                onPress={() => handleTimeChange(false, "minute")}
+                icon={
+                  <ThemedText
+                    style={[styles.timeButton, { color: colors.text }]}
+                  >
+                    ▼
+                  </ThemedText>
+                }
+                variant="ghost"
+                size="small"
+              />
+              <Caption1 hierarchy="secondary" style={styles.timeLabel}>
+                Min
+              </Caption1>
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderPreview = () => (
+    <View style={styles.section}>
+      <Headline style={styles.sectionTitle}>Preview</Headline>
+      <View
+        style={[
+          styles.previewCard,
+          {
+            backgroundColor: colors.backgroundTertiary,
+            borderColor: colors.separator,
+          },
+        ]}
+      >
+        <View style={styles.previewContent}>
+          <ThemedText style={styles.previewIcon}>
+            {FREQUENCY_OPTIONS.find((o) => o.key === selectedType)?.icon ||
+              "📝"}
+          </ThemedText>
+          <View style={styles.previewText}>
+            <Body style={styles.previewDescription}>
+              {getFrequencyDescription()}
+            </Body>
+            <Caption1 hierarchy="secondary" style={styles.previewType}>
+              {FREQUENCY_OPTIONS.find((o) => o.key === selectedType)?.label ||
+                "One-time"}
+            </Caption1>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+
   return (
     <Modal
       visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
+      animationType="none"
+      presentationStyle="overFullScreen"
+      transparent
       onRequestClose={onClose}
     >
-      <ThemedView style={[styles.container, { backgroundColor }]}>
-        <View style={[styles.header, { borderBottomColor: borderColor }]}>
-          <ThemedText
-            type="title"
-            style={[styles.title, { color: primaryColor }]}
-          >
-            Frequency Settings
-          </ThemedText>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <ThemedText style={styles.closeButtonText}>✕</ThemedText>
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Frequency Type Selection */}
-          <View style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>How often?</ThemedText>
-            {FREQUENCY_OPTIONS.map((option) => (
-              <TouchableOpacity
-                key={option.key}
-                style={[
-                  styles.optionButton,
-                  { borderColor },
-                  selectedType === option.key && {
-                    backgroundColor: primaryColor,
-                    borderColor: primaryColor,
-                  },
-                ]}
-                onPress={() => setSelectedType(option.key)}
-              >
-                <View style={styles.optionContent}>
-                  <ThemedText
-                    style={[
-                      styles.optionLabel,
-                      selectedType === option.key && { color: "#ffffff" },
-                    ]}
-                  >
-                    {option.label}
-                  </ThemedText>
-                  <ThemedText
-                    style={[
-                      styles.optionDescription,
-                      { opacity: isDark ? 0.9 : 0.7 },
-                      selectedType === option.key && {
-                        color: "#ffffff",
-                        opacity: 0.95,
-                      },
-                    ]}
-                  >
-                    {option.description}
-                  </ThemedText>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Specific Days Selection */}
-          {selectedType === "specific_days" && (
-            <View style={styles.section}>
-              <ThemedText style={styles.sectionTitle}>Select Days</ThemedText>
-              <View style={styles.daysGrid}>
-                {DAYS_OF_WEEK.map((day) => (
-                  <TouchableOpacity
-                    key={day.key}
-                    style={[
-                      styles.dayButton,
-                      { borderColor },
-                      selectedDays.includes(day.key) && {
-                        backgroundColor: secondaryColor,
-                        borderColor: secondaryColor,
-                      },
-                    ]}
-                    onPress={() => toggleDay(day.key)}
-                  >
-                    <ThemedText
-                      style={[
-                        styles.dayButtonText,
-                        selectedDays.includes(day.key) && { color: "#ffffff" },
-                      ]}
-                    >
-                      {day.label.slice(0, 3)}
-                    </ThemedText>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* Times Count Selection */}
-          {(selectedType === "times_per_week" ||
-            selectedType === "times_per_month") && (
-            <View style={styles.section}>
-              <ThemedText style={styles.sectionTitle}>
-                How many times?
-              </ThemedText>
-              <View style={styles.counterContainer}>
-                <TouchableOpacity
-                  style={[styles.counterButton, { borderColor }]}
-                  onPress={() => handleTimeCountChange(false)}
-                >
-                  <ThemedText style={styles.counterButtonText}>-</ThemedText>
-                </TouchableOpacity>
-                <ThemedText style={styles.counterValue}>
-                  {timesCount}
-                </ThemedText>
-                <TouchableOpacity
-                  style={[styles.counterButton, { borderColor }]}
-                  onPress={() => handleTimeCountChange(true)}
-                >
-                  <ThemedText style={styles.counterButtonText}>+</ThemedText>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-
-          {/* Time Selection */}
-          {selectedType !== "once" && (
-            <View style={styles.section}>
-              <View style={styles.switchContainer}>
-                <ThemedText style={styles.sectionTitle}>
-                  Set specific time?
-                </ThemedText>
-                <Switch
-                  value={hasTime}
-                  onValueChange={setHasTime}
-                  trackColor={{ false: "#767577", true: primaryColor }}
-                  thumbColor={hasTime ? "#fff" : "#f4f3f4"}
-                />
-              </View>
-
-              {hasTime && (
-                <View style={styles.timeContainer}>
-                  <ThemedText style={styles.timeLabel}>Time:</ThemedText>
-                  <View style={styles.timeControls}>
-                    <View style={styles.timeSection}>
-                      <TouchableOpacity
-                        style={[styles.timeButton, { borderColor }]}
-                        onPress={() => handleTimeChange(true, "hour")}
-                      >
-                        <ThemedText style={styles.timeButtonText}>+</ThemedText>
-                      </TouchableOpacity>
-                      <ThemedText style={styles.timeValue}>
-                        {selectedTime.split(":")[0]}
-                      </ThemedText>
-                      <TouchableOpacity
-                        style={[styles.timeButton, { borderColor }]}
-                        onPress={() => handleTimeChange(false, "hour")}
-                      >
-                        <ThemedText style={styles.timeButtonText}>-</ThemedText>
-                      </TouchableOpacity>
-                    </View>
-                    <ThemedText style={styles.timeSeparator}>:</ThemedText>
-                    <View style={styles.timeSection}>
-                      <TouchableOpacity
-                        style={[styles.timeButton, { borderColor }]}
-                        onPress={() => handleTimeChange(true, "minute")}
-                      >
-                        <ThemedText style={styles.timeButtonText}>+</ThemedText>
-                      </TouchableOpacity>
-                      <ThemedText style={styles.timeValue}>
-                        {selectedTime.split(":")[1]}
-                      </ThemedText>
-                      <TouchableOpacity
-                        style={[styles.timeButton, { borderColor }]}
-                        onPress={() => handleTimeChange(false, "minute")}
-                      >
-                        <ThemedText style={styles.timeButtonText}>-</ThemedText>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* Preview */}
-          <View style={[styles.previewContainer, { borderColor }]}>
-            <ThemedText style={styles.previewLabel}>Preview:</ThemedText>
-            <ThemedText style={styles.previewText}>
-              {getFrequencyDescription()}
-            </ThemedText>
-          </View>
-        </ScrollView>
-
-        {/* Footer Buttons */}
-        <View style={[styles.footer, { borderTopColor: borderColor }]}>
+      <KeyboardAvoidingView
+        style={styles.modalOverlay}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        {/* Backdrop */}
+        <Animated.View
+          style={[
+            styles.backdrop,
+            {
+              opacity: fadeAnim,
+            },
+          ]}
+        >
           <TouchableOpacity
-            style={[
-              styles.saveButton,
-              !isValidSelection() && styles.saveButtonDisabled,
-            ]}
-            onPress={handleSave}
-            disabled={!isValidSelection()}
+            style={styles.backdropTouch}
+            onPress={onClose}
+            activeOpacity={1}
+          />
+        </Animated.View>
+
+        {/* Modal Content */}
+        <Animated.View
+          style={[
+            styles.modalContainer,
+            {
+              backgroundColor: colors.background,
+              borderColor: colors.separator,
+              paddingBottom: Math.max(insets.bottom, Spacing.lg),
+              transform: [{ translateY: slideTransform }],
+            },
+          ]}
+        >
+          {/* Handle Bar */}
+          <View style={styles.handleContainer}>
+            <View
+              style={[
+                styles.handle,
+                {
+                  backgroundColor: colors.separator,
+                },
+              ]}
+            />
+          </View>
+
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerContent}>
+              <Title2 style={styles.title}>Frequency Settings</Title2>
+              <Caption1 hierarchy="secondary" style={styles.subtitle}>
+                How often should this task repeat?
+              </Caption1>
+            </View>
+            <IconButton
+              onPress={onClose}
+              icon={
+                <ThemedText
+                  style={[styles.closeIcon, { color: colors.textSecondary }]}
+                >
+                  ✕
+                </ThemedText>
+              }
+              variant="ghost"
+              size="medium"
+            />
+          </View>
+
+          <ScrollView
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
           >
-            <ThemedText style={styles.saveButtonText}>
-              {selectedType === "once"
-                ? "Set as One-time Task"
-                : "Save Frequency"}
-            </ThemedText>
-          </TouchableOpacity>
-        </View>
-      </ThemedView>
+            {renderFrequencyOptions()}
+            {renderSpecificDaysSelector()}
+            {renderCountSelector()}
+            {renderTimeSelector()}
+            {renderPreview()}
+          </ScrollView>
+
+          {/* Action Buttons */}
+          <View style={styles.actionSection}>
+            <PrimaryButton
+              title="Save Frequency"
+              onPress={handleSave}
+              disabled={!isValidSelection()}
+              fullWidth
+              style={styles.saveButton}
+            />
+            <SecondaryButton
+              title="Cancel"
+              onPress={onClose}
+              fullWidth
+              style={styles.cancelButton}
+            />
+          </View>
+        </Animated.View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  modalOverlay: {
     flex: 1,
+    justifyContent: "flex-end",
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+  },
+  backdropTouch: {
+    flex: 1,
+  },
+  modalContainer: {
+    borderTopLeftRadius: BorderRadius.xl,
+    borderTopRightRadius: BorderRadius.xl,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    maxHeight: "90%",
+    minHeight: "70%",
+    ...Shadows.large,
+  },
+  handleContainer: {
+    alignItems: "center",
+    paddingVertical: Spacing.sm,
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
   },
   header: {
     flexDirection: "row",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-    alignItems: "center",
-    padding: 20,
-    paddingTop: 60,
-    borderBottomWidth: 1,
+    paddingHorizontal: Layout.screenPadding,
+    paddingBottom: Spacing.lg,
   },
-  title: {
+  headerContent: {
     flex: 1,
   },
-  closeButton: {
-    padding: 10,
+  title: {
+    marginBottom: Spacing.xs,
+    fontWeight: "700",
   },
-  closeButtonText: {
-    fontSize: 20,
-    fontWeight: "bold",
-    opacity: 0.8,
+  subtitle: {
+    lineHeight: 18,
+  },
+  closeIcon: {
+    fontSize: 18,
+    fontWeight: "600",
+    lineHeight: 24,
   },
   content: {
     flex: 1,
-    padding: 20,
+    paddingHorizontal: Layout.screenPadding,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: Spacing.xl,
   },
   sectionTitle: {
-    fontSize: 18,
+    marginBottom: Spacing.md,
     fontWeight: "600",
-    marginBottom: 12,
   },
-  optionButton: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
-    backgroundColor: "transparent",
+  optionsGrid: {
+    gap: Spacing.md,
   },
-  optionContent: {
-    flexDirection: "column",
+  frequencyOption: {
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 2,
+    alignItems: "center",
+    ...Shadows.small,
+  },
+  optionIcon: {
+    fontSize: 32,
+    marginBottom: Spacing.sm,
   },
   optionLabel: {
-    fontSize: 16,
+    marginBottom: Spacing.xs,
     fontWeight: "600",
-    marginBottom: 4,
+    textAlign: "center",
   },
   optionDescription: {
-    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 16,
   },
   daysGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: Spacing.sm,
   },
   dayButton: {
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: BorderRadius.md,
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: "transparent",
-  },
-  dayButtonText: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  counterContainer: {
-    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 20,
+    minWidth: 80,
+    ...Shadows.small,
   },
-  counterButton: {
-    borderWidth: 1,
-    borderRadius: 8,
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
+  dayShort: {
+    fontWeight: "700",
+    marginBottom: Spacing.xs,
   },
-  counterButtonText: {
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  counterValue: {
-    fontSize: 24,
-    fontWeight: "600",
-    minWidth: 40,
+  dayLabel: {
+    fontSize: 10,
     textAlign: "center",
   },
-  switchContainer: {
+  countSelector: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    ...Shadows.small,
   },
-  timeContainer: {
+  countDisplay: {
     alignItems: "center",
+    flex: 1,
   },
-  timeLabel: {
-    fontSize: 16,
+  countNumber: {
+    fontWeight: "700",
+    marginBottom: Spacing.xs,
+  },
+  countUnit: {
+    textAlign: "center",
+  },
+  countButton: {
+    fontSize: 20,
     fontWeight: "600",
-    marginBottom: 12,
+    lineHeight: 24,
   },
-  timeControls: {
+  timeSectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "space-between",
+    marginBottom: Spacing.md,
   },
-  timeSection: {
-    alignItems: "center",
-    gap: 8,
-  },
-  timeButton: {
-    borderWidth: 1,
-    borderRadius: 6,
-    width: 32,
-    height: 32,
+  timeSelector: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    gap: Spacing.lg,
+    ...Shadows.small,
   },
-  timeButtonText: {
-    fontSize: 16,
+  timeUnit: {
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  timeButton: {
+    fontSize: 14,
     fontWeight: "600",
   },
   timeValue: {
-    fontSize: 20,
-    fontWeight: "600",
-    minWidth: 32,
+    fontWeight: "700",
+    minWidth: 50,
     textAlign: "center",
   },
+  timeLabel: {
+    textAlign: "center",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
   timeSeparator: {
-    fontSize: 20,
-    fontWeight: "600",
+    fontWeight: "700",
+    opacity: 0.5,
   },
-  previewContainer: {
+  previewCard: {
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    backgroundColor: "rgba(0, 122, 255, 0.05)",
+    ...Shadows.small,
   },
-  previewLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 4,
-    opacity: 0.9,
+  previewContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+  },
+  previewIcon: {
+    fontSize: 24,
   },
   previewText: {
-    fontSize: 16,
+    flex: 1,
+  },
+  previewDescription: {
+    marginBottom: Spacing.xs,
     fontWeight: "500",
   },
-  footer: {
-    padding: 20,
-    borderTopWidth: 1,
+  previewType: {
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    fontWeight: "600",
+  },
+  actionSection: {
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: Spacing.lg,
+    gap: Spacing.md,
   },
   saveButton: {
-    backgroundColor: "#007AFF",
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: "center",
+    minHeight: ComponentSizes.button.large,
   },
-  saveButtonDisabled: {
-    backgroundColor: "#ccc",
-  },
-  saveButtonText: {
-    color: "#ffffff",
-    fontSize: 17,
-    fontWeight: "600",
+  cancelButton: {
+    minHeight: ComponentSizes.button.medium,
   },
 });

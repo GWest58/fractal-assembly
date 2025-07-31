@@ -27,6 +27,7 @@ try {
       frequency_type TEXT DEFAULT 'daily',
       frequency_data TEXT DEFAULT '{}',
       frequency_time TEXT,
+      completed BOOLEAN NOT NULL DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -72,6 +73,10 @@ try {
   );
   db.exec(
     `CREATE INDEX IF NOT EXISTS idx_tasks_frequency ON tasks (frequency_type)`,
+  );
+
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_tasks_completed ON tasks (completed)`,
   );
 
   console.log("Database initialized successfully!");

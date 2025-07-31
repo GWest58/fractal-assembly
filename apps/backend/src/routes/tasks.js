@@ -62,7 +62,7 @@ router.post("/", async (req, res) => {
 
     const taskData = {
       text: text.trim(),
-      frequency: frequency || { type: "daily", data: {}, time: null },
+      frequency: frequency, // Don't default to daily for one-time tasks
     };
 
     const task = await Task.create(taskData);
@@ -84,7 +84,7 @@ router.post("/", async (req, res) => {
 // PUT /api/tasks/:id - Update a task
 router.put("/:id", async (req, res) => {
   try {
-    const { text, frequency } = req.body;
+    const { text, frequency, completed } = req.body;
     const taskId = req.params.id;
 
     // Check if task exists
@@ -96,18 +96,36 @@ router.put("/:id", async (req, res) => {
       });
     }
 
-    // Validation
-    if (!text || !text.trim()) {
-      return res.status(400).json({
-        success: false,
-        error: "Task text is required",
-      });
+    // Build update data object
+    const updateData = {};
+
+    // Only update text if provided and valid
+    if (text !== undefined) {
+      if (!text || !text.trim()) {
+        return res.status(400).json({
+          success: false,
+          error: "Task text cannot be empty",
+        });
+      }
+      updateData.text = text.trim();
+    } else {
+      // Only set text if we're updating other fields that require it
+      if (frequency !== undefined || completed === undefined) {
+        updateData.text = existingTask.text;
+      }
     }
 
-    const updateData = {
-      text: text.trim(),
-      frequency: frequency || existingTask.frequency,
-    };
+    // Handle frequency updates
+    if (frequency !== undefined) {
+      updateData.frequency = frequency;
+    } else {
+      updateData.frequency = existingTask.frequency;
+    }
+
+    // Handle completed field for one-time tasks
+    if (completed !== undefined) {
+      updateData.completed = completed;
+    }
 
     const updatedTask = await Task.update(taskId, updateData);
     res.json({
