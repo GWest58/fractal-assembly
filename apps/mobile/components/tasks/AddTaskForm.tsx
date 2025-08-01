@@ -26,6 +26,7 @@ import {
   SecondaryButton,
   IconButton,
 } from "@/components/ui/Button";
+import { Dropdown } from "@/components/ui/Dropdown";
 import { useTask } from "@/contexts/TaskContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { Colors } from "@/constants/Colors";
@@ -39,6 +40,8 @@ import {
 } from "@/constants/DesignTokens";
 import { FrequencySelector } from "./FrequencySelector";
 import { TaskFrequency } from "@/types/Task";
+import { Project } from "@/types";
+import { projectApi } from "@/services/projectApi";
 
 import { DurationInput } from "../DurationInput";
 
@@ -60,6 +63,9 @@ export const AddTaskForm: React.FC<AddTaskFormProps> = ({
   const [showFrequencySelector, setShowFrequencySelector] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
 
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
@@ -70,6 +76,31 @@ export const AddTaskForm: React.FC<AddTaskFormProps> = ({
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Load projects when modal opens
+  useEffect(() => {
+    if (visible) {
+      loadProjects();
+      // Reset form when modal opens
+      setTaskText("");
+      setFrequency(undefined);
+      setDurationSeconds(0);
+      setSelectedProjectId("");
+      setHasUserInteracted(false);
+    }
+  }, [visible]);
+
+  const loadProjects = async () => {
+    try {
+      setLoadingProjects(true);
+      const fetchedProjects = await projectApi.getAllProjects();
+      setProjects(fetchedProjects);
+    } catch (error) {
+      console.error("Failed to load projects:", error);
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
 
   // Simple slide animation
   useEffect(() => {
@@ -135,6 +166,7 @@ export const AddTaskForm: React.FC<AddTaskFormProps> = ({
         text: taskText.trim(),
         frequency: frequency,
         durationSeconds: durationSeconds > 0 ? durationSeconds : undefined,
+        projectId: selectedProjectId || undefined,
       });
 
       // Close modal after successful creation with minimal delay
@@ -156,6 +188,14 @@ export const AddTaskForm: React.FC<AddTaskFormProps> = ({
 
     // Dismiss keyboard first
     Keyboard.dismiss();
+
+    // Reset form state
+    setTaskText("");
+    setFrequency(undefined);
+    setDurationSeconds(0);
+    setSelectedProjectId("");
+    setHasUserInteracted(false);
+    setIsSubmitting(false);
 
     // Close immediately
     onClose();
@@ -364,6 +404,32 @@ export const AddTaskForm: React.FC<AddTaskFormProps> = ({
                       style={styles.characterCount}
                     >
                       {taskText.length}/500 characters
+                    </Caption1>
+                  )}
+                </View>
+
+                {/* Project Section */}
+                <View style={styles.section}>
+                  <Headline style={styles.sectionTitle}>Project</Headline>
+                  <Dropdown
+                    options={[
+                      { label: "No project", value: "" },
+                      ...projects.map((project) => ({
+                        label: project.name,
+                        value: project.id,
+                      })),
+                    ]}
+                    value={selectedProjectId}
+                    onSelect={setSelectedProjectId}
+                    placeholder="Select a project"
+                    disabled={loadingProjects}
+                  />
+                  {loadingProjects && (
+                    <Caption1
+                      hierarchy="secondary"
+                      style={styles.projectLoadingText}
+                    >
+                      Loading projects...
                     </Caption1>
                   )}
                 </View>
@@ -885,6 +951,10 @@ const styles = StyleSheet.create({
   characterCount: {
     marginTop: Spacing.sm,
     textAlign: "right",
+  },
+  projectLoadingText: {
+    marginTop: Spacing.sm,
+    fontStyle: "italic",
   },
   frequencySelector: {
     borderRadius: BorderRadius.lg,

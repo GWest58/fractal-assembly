@@ -16,6 +16,7 @@ import { Spacing, BorderRadius, Typography } from "@/constants/DesignTokens";
 import { InlineTimer } from "../InlineTimer";
 import { TimerStatusResponse } from "@/types/Task";
 import { TimerService } from "../../services/timerService";
+import { DateUtils } from "../../utils/dateUtils";
 
 import { Task } from "@/types/Task";
 
@@ -268,6 +269,13 @@ export const TaskItem: React.FC<TaskItemProps> = memo(({ task }) => {
                   `⏱ ${TimerService.formatTime(task.durationSeconds)}`}
               </Caption1>
             )}
+
+            {/* Show completion time for completed tasks */}
+            {isCompleted && task.lastCompletedDate && (
+              <Caption1 hierarchy="secondary" style={styles.completionTime}>
+                Completed {DateUtils.formatSmart(task.lastCompletedDate)}
+              </Caption1>
+            )}
           </View>
 
           {renderFrequencyBadge()}
@@ -421,6 +429,12 @@ const styles = StyleSheet.create({
   completedText: {
     textDecorationLine: "line-through",
     opacity: 0.6,
+  },
+  completionTime: {
+    fontStyle: "italic",
+    lineHeight: 14,
+    marginTop: Spacing.xs,
+    opacity: 0.7,
   },
   frequencyDetail: {
     fontStyle: "italic",

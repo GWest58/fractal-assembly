@@ -238,6 +238,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         text: input.text,
         frequency: input.frequency as any,
         durationSeconds: input.durationSeconds,
+        projectId: input.projectId,
       });
 
       const newTask = convertApiTaskToTask(apiTask as any);

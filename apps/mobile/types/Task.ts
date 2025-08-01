@@ -36,6 +36,7 @@ export interface Task {
   id: string;
   text: string;
   completed: boolean;
+  projectId?: string;
   createdAt: Date;
   updatedAt: Date;
   completedToday?: boolean;
@@ -58,6 +59,7 @@ export interface TimerStatusResponse {
 
 export type CreateTaskInput = {
   text: string;
+  projectId?: string;
   frequency?: TaskFrequency;
   durationSeconds?: number;
 };
@@ -66,6 +68,7 @@ export type UpdateTaskInput = {
   id: string;
   text?: string;
   completed?: boolean;
+  projectId?: string;
   completedToday?: boolean;
   lastCompletedDate?: Date;
   frequency?: TaskFrequency;

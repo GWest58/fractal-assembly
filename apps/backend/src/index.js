@@ -5,6 +5,8 @@ import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import database from "./models/database.js";
 import tasksRouter from "./routes/tasks.js";
+import goalsRouter from "./routes/goals.js";
+import projectsRouter from "./routes/projects.js";
 import adminRouter from "./routes/admin.js";
 
 const app = express();
@@ -106,6 +108,8 @@ app.get("/health", (req, res) => {
 
 // API routes
 app.use("/api/tasks", tasksRouter);
+app.use("/api/goals", goalsRouter);
+app.use("/api/projects", projectsRouter);
 app.use("/admin", adminRouter);
 
 // Root endpoint
@@ -117,6 +121,8 @@ app.get("/", (req, res) => {
     endpoints: {
       health: "/health",
       tasks: "/api/tasks",
+      goals: "/api/goals",
+      projects: "/api/projects",
       documentation: "See README.md for API documentation",
     },
   });

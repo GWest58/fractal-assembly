@@ -50,7 +50,7 @@ router.get("/:id", async (req, res) => {
 // POST /api/tasks - Create a new task
 router.post("/", async (req, res) => {
   try {
-    const { text, frequency, durationSeconds } = req.body;
+    const { text, frequency, durationSeconds, projectId } = req.body;
 
     // Validation
     if (!text || !text.trim()) {
@@ -64,6 +64,7 @@ router.post("/", async (req, res) => {
       text: text.trim(),
       frequency: frequency, // Don't default to daily for one-time tasks
       durationSeconds: durationSeconds,
+      projectId: projectId,
     };
 
     const task = await Task.create(taskData);

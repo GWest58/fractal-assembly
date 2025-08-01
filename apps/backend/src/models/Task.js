@@ -6,6 +6,7 @@ class Task {
     this.id = data.id;
     this.text = data.text;
     this.completed = Boolean(data.completed);
+    this.projectId = data.project_id || data.projectId;
     this.createdAt = data.created_at || data.createdAt;
     this.updatedAt = data.updated_at || data.updatedAt;
     this.frequency = this._parseFrequency(data);
@@ -72,12 +73,13 @@ class Task {
     const frequency = data.frequency; // Don't default to daily for one-time tasks
 
     const sql = `
-      INSERT INTO tasks (id, text, frequency_type, frequency_data, frequency_time, completed, duration_seconds, timer_status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO tasks (id, text, project_id, frequency_type, frequency_data, frequency_time, completed, duration_seconds, timer_status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     const params = [
       id,
       data.text,
+      data.projectId || null,
       frequency ? frequency.type : null,
       frequency ? JSON.stringify(frequency.data) : null,
       frequency ? frequency.time : null,
@@ -96,6 +98,11 @@ class Task {
       SET text = ?, updated_at = CURRENT_TIMESTAMP
     `;
     let params = [data.text];
+
+    if (data.projectId !== undefined) {
+      sql += `, project_id = ?`;
+      params.push(data.projectId);
+    }
 
     if (data.frequency !== undefined) {
       sql += `, frequency_type = ?, frequency_data = ?, frequency_time = ?`;
@@ -215,7 +222,18 @@ class Task {
     const completionDate = date.toISOString().split("T")[0];
     const sql = `
       SELECT
-        t.*,
+        t.id,
+        t.text,
+        t.project_id,
+        t.frequency_type,
+        t.frequency_data,
+        t.frequency_time,
+        t.completed,
+        t.created_at,
+        t.updated_at,
+        t.duration_seconds,
+        t.timer_started_at,
+        t.timer_status,
         CASE WHEN tc.id IS NOT NULL THEN 1 ELSE 0 END as completed_today,
         tc.completed_at as last_completed_at
       FROM tasks t
@@ -242,6 +260,7 @@ class Task {
           id: task.id,
           text: task.text,
           completed: task.completed, // Add completed field for one-time tasks
+          projectId: task.projectId,
           completedToday: completedToday,
           lastCompletedAt: taskRow?.last_completed_at,
           createdAt: task.createdAt,
@@ -479,8 +498,19 @@ class Task {
       elapsed = Math.floor((now - startTime) / 1000);
       remainingSeconds = Math.max(0, task.durationSeconds - elapsed);
 
-      // Auto-complete if timer has expired
-      if (remainingSeconds === 0 && task.timerStatus === "running") {
+      // Auto-complete if timer has expired AND it expired recently (within last hour)
+      // This prevents old "running" timers from auto-completing inappropriately
+      const timeSinceExpiry = elapsed - task.durationSeconds;
+      const expiredRecently = timeSinceExpiry <= 3600; // 1 hour in seconds
+
+      if (
+        remainingSeconds === 0 &&
+        task.timerStatus === "running" &&
+        expiredRecently
+      ) {
+        console.log(
+          `Timer expired recently for task ${task.text}, auto-completing...`,
+        );
         // Mark task as completed
         if (task.frequency) {
           await Task.markComplete(taskId);
@@ -491,6 +521,20 @@ class Task {
             timerStatus: "completed",
           });
         }
+      } else if (
+        remainingSeconds === 0 &&
+        task.timerStatus === "running" &&
+        !expiredRecently
+      ) {
+        // Timer expired long ago, just update status without completing task
+        console.log(
+          `Timer expired long ago for task ${task.text}, stopping timer without completion...`,
+        );
+        await Task.update(taskId, {
+          text: task.text,
+          timerStatus: "not_started",
+          timerStartedAt: null,
+        });
       }
     }
 
@@ -527,6 +571,7 @@ class Task {
       id: this.id,
       text: this.text,
       completed: this.completed,
+      projectId: this.projectId,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       frequency: this.frequency,
