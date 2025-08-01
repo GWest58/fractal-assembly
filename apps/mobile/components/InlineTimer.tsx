@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, TouchableOpacity, StyleSheet } from "react-native";
+import { View, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { Audio } from "expo-av";
+import * as Haptics from "expo-haptics";
 import { Caption1, Caption2 } from "./ThemedText";
 import { TimerService } from "../services/timerService";
 import { TimerStatusResponse, TimerStatus } from "../types/Task";
@@ -31,15 +33,28 @@ export const InlineTimer: React.FC<InlineTimerProps> = React.memo(
     const [elapsed, setElapsed] = useState<number>(0);
     const [isLoading, setIsLoading] = useState(false);
     const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const soundRef = useRef<Audio.Sound | null>(null);
+    const notificationSentRef = useRef<boolean>(false);
 
     const colorScheme = useColorScheme();
     const colors = Colors[colorScheme ?? "light"];
 
-    // Update timer display every second when running
+    // Local countdown timer - no API polling
     useEffect(() => {
-      if (currentStatus === "running") {
+      if (currentStatus === "running" && timeRemaining > 0) {
         intervalRef.current = setInterval(() => {
-          updateTimerStatus();
+          setTimeRemaining((prev) => {
+            const newTime = prev - 1;
+            setElapsed((prevElapsed) => prevElapsed + 1);
+
+            // Check if timer completed
+            if (newTime <= 0) {
+              setCurrentStatus("completed");
+              notificationSentRef.current = false; // Allow notification
+              return 0;
+            }
+            return newTime;
+          });
         }, 1000);
       } else {
         if (intervalRef.current) {
@@ -53,6 +68,14 @@ export const InlineTimer: React.FC<InlineTimerProps> = React.memo(
           clearInterval(intervalRef.current);
         }
       };
+    }, [currentStatus, timeRemaining]);
+
+    // Handle timer completion
+    useEffect(() => {
+      if (currentStatus === "completed" && !notificationSentRef.current) {
+        notificationSentRef.current = true;
+        playTimerCompleteNotification();
+      }
     }, [currentStatus]);
 
     // Clean up interval on unmount
@@ -64,39 +87,111 @@ export const InlineTimer: React.FC<InlineTimerProps> = React.memo(
       };
     }, []);
 
-    const updateTimerStatus = useCallback(async () => {
+    // Load sound and setup audio on component mount
+    useEffect(() => {
+      const loadSound = async () => {
+        try {
+          // Set audio mode to allow sounds even in silent mode
+          await Audio.setAudioModeAsync({
+            playsInSilentModeIOS: true,
+            staysActiveInBackground: false,
+            shouldDuckAndroid: true,
+          });
+
+          // Load timer completion sound
+          const { sound } = await Audio.Sound.createAsync(
+            require("../assets/sounds/timer-complete.wav"),
+            { shouldPlay: false },
+          );
+          soundRef.current = sound;
+        } catch (error) {
+          console.log("Error setting up audio:", error);
+        }
+      };
+
+      loadSound();
+
+      // Cleanup sound on unmount
+      return () => {
+        if (soundRef.current) {
+          soundRef.current.unloadAsync();
+        }
+      };
+    }, []);
+
+    const playTimerCompleteNotification = async () => {
       try {
-        const status = await TimerService.getTimerStatus(taskId);
+        // Strong haptic feedback
+        await Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Success,
+        );
 
-        // Only update state if values actually changed to prevent flicker
-        if (status.status !== currentStatus) {
-          setCurrentStatus(status.status);
-        }
-        if (status.elapsed !== elapsed) {
-          setElapsed(status.elapsed);
-        }
-        if ((status.remainingSeconds || 0) !== timeRemaining) {
-          setTimeRemaining(status.remainingSeconds || 0);
+        // Play sound if available
+        if (soundRef.current) {
+          try {
+            await soundRef.current.setVolumeAsync(1.0);
+            await soundRef.current.setPositionAsync(0);
+            await soundRef.current.playAsync();
+          } catch (soundError) {
+            console.log("Sound playback failed:", soundError);
+          }
         }
 
+        // Show completion alert
+        Alert.alert(
+          "⏰ Timer Complete!",
+          "Your timer has finished. Great job!",
+          [{ text: "OK", style: "default" }],
+          { cancelable: true },
+        );
+
+        // Delay API call to let sound finish playing
+        setTimeout(() => {
+          if (onTimerComplete) {
+            onTimerComplete();
+          }
+        }, 1500);
+
+        // Additional haptic sequence for emphasis
+        const hapticSequence = [200, 400, 600];
+        hapticSequence.forEach((delay) => {
+          setTimeout(async () => {
+            try {
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+            } catch (error) {
+              console.log("Error with haptic sequence:", error);
+            }
+          }, delay);
+        });
+      } catch (error) {
+        console.log("Error playing notification:", error);
+      }
+    };
+
+    // Only sync status with server, don't use for countdown
+    const syncTimerStatus = useCallback(async () => {
+      try {
         if (onTimerUpdate) {
-          onTimerUpdate(status);
-        }
-
-        // Check if timer completed
-        if (status.isExpired && onTimerComplete) {
-          onTimerComplete();
+          const mockStatus = {
+            taskId,
+            status: currentStatus,
+            durationSeconds: durationSeconds || 0,
+            elapsed,
+            remainingSeconds: timeRemaining,
+            isExpired: currentStatus === "completed",
+          };
+          onTimerUpdate(mockStatus);
         }
       } catch (error) {
-        console.error("Failed to update timer status:", error);
+        console.error("Failed to sync timer status:", error);
       }
     }, [
       taskId,
       currentStatus,
       elapsed,
       timeRemaining,
+      durationSeconds,
       onTimerUpdate,
-      onTimerComplete,
     ]);
 
     const handleStartTimer = async () => {
@@ -104,9 +199,15 @@ export const InlineTimer: React.FC<InlineTimerProps> = React.memo(
 
       setIsLoading(true);
       try {
+        notificationSentRef.current = false; // Reset notification flag when starting
         await TimerService.startTimer(taskId);
         setCurrentStatus("running");
-        await updateTimerStatus();
+        // Reset timer to full duration if not already set
+        if (timeRemaining <= 0) {
+          setTimeRemaining(durationSeconds || 0);
+          setElapsed(0);
+        }
+        await syncTimerStatus();
       } catch (error) {
         console.error("Failed to start timer:", error);
       } finally {
@@ -119,7 +220,7 @@ export const InlineTimer: React.FC<InlineTimerProps> = React.memo(
       try {
         await TimerService.pauseTimer(taskId);
         setCurrentStatus("paused");
-        await updateTimerStatus();
+        await syncTimerStatus();
       } catch (error) {
         console.error("Failed to pause timer:", error);
       } finally {
@@ -134,7 +235,8 @@ export const InlineTimer: React.FC<InlineTimerProps> = React.memo(
         setCurrentStatus("not_started");
         setTimeRemaining(durationSeconds || 0);
         setElapsed(0);
-        await updateTimerStatus();
+        notificationSentRef.current = false; // Reset notification flag
+        await syncTimerStatus();
       } catch (error) {
         console.error("Failed to stop timer:", error);
       } finally {
@@ -266,6 +368,24 @@ export const InlineTimer: React.FC<InlineTimerProps> = React.memo(
               )}
           </View>
         </View>
+
+        {/* Temporary Sound Test Button */}
+        <TouchableOpacity
+          style={{
+            backgroundColor: "#FF6B6B",
+            padding: 8,
+            margin: 5,
+            borderRadius: 5,
+            alignItems: "center",
+          }}
+          onPress={async () => {
+            await playTimerCompleteNotification();
+          }}
+        >
+          <Caption1 style={{ color: "white", fontWeight: "bold" }}>
+            🔊 Test Full Notification
+          </Caption1>
+        </TouchableOpacity>
       </View>
     );
   },

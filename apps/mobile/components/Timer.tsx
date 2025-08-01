@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { Audio } from "expo-av";
+import * as Haptics from "expo-haptics";
 import { TimerService } from "../services/timerService";
 import { TimerStatusResponse, TimerStatus } from "../types/Task";
 
@@ -26,6 +28,7 @@ export const Timer: React.FC<TimerProps> = ({
   const [elapsed, setElapsed] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
 
   // Update timer display every second when running
   useEffect(() => {
@@ -56,6 +59,78 @@ export const Timer: React.FC<TimerProps> = ({
     };
   }, []);
 
+  // Load sound on component mount
+  useEffect(() => {
+    const loadSound = async () => {
+      try {
+        // Set audio mode to allow sounds even in silent mode
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+        });
+
+        // To add a custom sound file:
+        // 1. Place a sound file in assets/sounds/timer-complete.mp3
+        // 2. Uncomment the lines below:
+
+        // const { sound } = await Audio.Sound.createAsync(
+        //   require('../assets/sounds/timer-complete.mp3'),
+        //   { shouldPlay: false }
+        // );
+        // soundRef.current = sound;
+
+        console.log("Audio mode configured for timer notifications");
+      } catch (error) {
+        console.log("Error setting up audio:", error);
+      }
+    };
+
+    loadSound();
+
+    // Cleanup sound on unmount
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
+      }
+    };
+  }, []);
+
+  const playTimerCompleteNotification = async () => {
+    try {
+      // Strong haptic feedback
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      // Play sound if available
+      if (soundRef.current) {
+        await soundRef.current.setPositionAsync(0);
+        await soundRef.current.playAsync();
+      }
+
+      // Show completion alert
+      Alert.alert(
+        "⏰ Timer Complete!",
+        "Your timer has finished. Great job!",
+        [{ text: "OK", style: "default" }],
+        { cancelable: true },
+      );
+
+      // Additional haptic sequence for emphasis
+      const hapticSequence = [200, 400, 600];
+      hapticSequence.forEach((delay) => {
+        setTimeout(async () => {
+          try {
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          } catch (error) {
+            console.log("Error with haptic sequence:", error);
+          }
+        }, delay);
+      });
+    } catch (error) {
+      console.log("Error playing notification:", error);
+    }
+  };
+
   const updateTimerStatus = async () => {
     try {
       const status = await TimerService.getTimerStatus(taskId);
@@ -68,8 +143,13 @@ export const Timer: React.FC<TimerProps> = ({
       }
 
       // Check if timer completed
-      if (status.isExpired && onTimerComplete) {
-        onTimerComplete();
+      if (status.isExpired) {
+        // Play sound and haptic feedback
+        await playTimerCompleteNotification();
+
+        if (onTimerComplete) {
+          onTimerComplete();
+        }
       }
     } catch (error) {
       console.error("Failed to update timer status:", error);
