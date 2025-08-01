@@ -82,34 +82,18 @@ export const TaskItem: React.FC<TaskItemProps> = memo(({ task }) => {
   };
 
   const handleToggle = () => {
-    // Immediate optimistic feedback - but lighter to prevent white flash
-    Animated.parallel([
-      // Scale animation for tactile feedback
-      Animated.sequence([
-        Animated.timing(scaleAnim, {
-          toValue: 0.98,
-          duration: 60,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scaleAnim, {
-          toValue: 1,
-          duration: 60,
-          useNativeDriver: true,
-        }),
-      ]),
-      // Subtle opacity change to prevent white flash
-      Animated.sequence([
-        Animated.timing(opacityAnim, {
-          toValue: 0.85,
-          duration: 80,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacityAnim, {
-          toValue: 1,
-          duration: 80,
-          useNativeDriver: true,
-        }),
-      ]),
+    // Subtle scale animation for tactile feedback
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.95,
+        duration: 50,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 50,
+        useNativeDriver: true,
+      }),
     ]).start();
 
     // Call toggle function
@@ -177,21 +161,23 @@ export const TaskItem: React.FC<TaskItemProps> = memo(({ task }) => {
       activeOpacity={0.7}
     >
       <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-        <View
-          style={[
-            styles.checkbox,
-            {
-              borderColor: isCompleted
-                ? taskColors.checkboxChecked
-                : taskColors.checkboxBorder,
-              backgroundColor: isCompleted
-                ? taskColors.checkboxChecked
-                : "transparent",
-            },
-          ]}
-        >
-          {isCompleted && <ThemedText style={styles.checkmark}>✓</ThemedText>}
-        </View>
+        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+          <View
+            style={[
+              styles.checkbox,
+              {
+                borderColor: isCompleted
+                  ? taskColors.checkboxChecked
+                  : taskColors.checkboxBorder,
+                backgroundColor: isCompleted
+                  ? taskColors.checkboxChecked
+                  : "transparent",
+              },
+            ]}
+          >
+            {isCompleted && <ThemedText style={styles.checkmark}>✓</ThemedText>}
+          </View>
+        </Animated.View>
       </Animated.View>
     </TouchableOpacity>
   );
@@ -360,23 +346,12 @@ export const TaskItem: React.FC<TaskItemProps> = memo(({ task }) => {
   };
 
   return (
-    <Animated.View
-      style={[
-        styles.container,
-        {
-          backgroundColor: colors.backgroundSecondary,
-          borderColor: colors.border,
-          opacity: opacityAnim,
-          transform: [{ scale: scaleAnim }],
-        },
-      ]}
-    >
+    <Animated.View style={[styles.container, { opacity: opacityAnim }]}>
       {renderCheckbox()}
       {renderTaskContent()}
     </Animated.View>
   );
 });
-
 TaskItem.displayName = "TaskItem";
 
 const styles = StyleSheet.create({
@@ -387,6 +362,15 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     minHeight: 72,
+    ...Platform.select({
+      web: {
+        backgroundColor: "#161820", // Dark mode for web
+        borderBottomColor: "#374151",
+      },
+      default: {
+        // Let native platforms use dynamic theming normally
+      },
+    }),
   },
   checkboxContainer: {
     marginRight: Spacing.md,
