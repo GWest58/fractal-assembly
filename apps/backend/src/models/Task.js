@@ -9,6 +9,9 @@ class Task {
     this.createdAt = data.created_at || data.createdAt;
     this.updatedAt = data.updated_at || data.updatedAt;
     this.frequency = this._parseFrequency(data);
+    this.durationSeconds = data.duration_seconds || data.durationSeconds;
+    this.timerStartedAt = data.timer_started_at || data.timerStartedAt;
+    this.timerStatus = data.timer_status || data.timerStatus || "not_started";
   }
 
   _parseFrequency(data) {
@@ -69,8 +72,8 @@ class Task {
     const frequency = data.frequency; // Don't default to daily for one-time tasks
 
     const sql = `
-      INSERT INTO tasks (id, text, frequency_type, frequency_data, frequency_time, completed)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO tasks (id, text, frequency_type, frequency_data, frequency_time, completed, duration_seconds, timer_status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `;
     const params = [
       id,
@@ -79,6 +82,8 @@ class Task {
       frequency ? JSON.stringify(frequency.data) : null,
       frequency ? frequency.time : null,
       data.completed ? 1 : 0,
+      data.durationSeconds || null,
+      "not_started",
     ];
 
     await database.run(sql, params);
@@ -104,6 +109,21 @@ class Task {
     if (data.completed !== undefined) {
       sql += `, completed = ?`;
       params.push(data.completed ? 1 : 0);
+    }
+
+    if (data.durationSeconds !== undefined) {
+      sql += `, duration_seconds = ?`;
+      params.push(data.durationSeconds);
+    }
+
+    if (data.timerStartedAt !== undefined) {
+      sql += `, timer_started_at = ?`;
+      params.push(data.timerStartedAt);
+    }
+
+    if (data.timerStatus !== undefined) {
+      sql += `, timer_status = ?`;
+      params.push(data.timerStatus);
     }
 
     sql += ` WHERE id = ?`;
@@ -227,6 +247,9 @@ class Task {
           createdAt: task.createdAt,
           updatedAt: task.updatedAt,
           frequency: task.frequency,
+          durationSeconds: task.durationSeconds,
+          timerStartedAt: task.timerStartedAt,
+          timerStatus: task.timerStatus,
         };
       });
   }
@@ -387,6 +410,118 @@ class Task {
     return await Task.getCompletionStats(this.id, days);
   }
 
+  // Timer management methods
+  static async startTimer(taskId) {
+    const task = await Task.getById(taskId);
+    if (!task) {
+      throw new Error("Task not found");
+    }
+
+    if (!task.durationSeconds) {
+      throw new Error("Task has no duration set");
+    }
+
+    const startedAt = new Date().toISOString();
+    await Task.update(taskId, {
+      text: task.text,
+      timerStartedAt: startedAt,
+      timerStatus: "running",
+    });
+
+    return await Task.getById(taskId);
+  }
+
+  static async pauseTimer(taskId) {
+    const task = await Task.getById(taskId);
+    if (!task) {
+      throw new Error("Task not found");
+    }
+
+    if (task.timerStatus !== "running") {
+      throw new Error("Timer is not running");
+    }
+
+    await Task.update(taskId, {
+      text: task.text,
+      timerStatus: "paused",
+    });
+
+    return await Task.getById(taskId);
+  }
+
+  static async stopTimer(taskId) {
+    const task = await Task.getById(taskId);
+    if (!task) {
+      throw new Error("Task not found");
+    }
+
+    await Task.update(taskId, {
+      text: task.text,
+      timerStartedAt: null,
+      timerStatus: "not_started",
+    });
+
+    return await Task.getById(taskId);
+  }
+
+  static async getTimerStatus(taskId) {
+    const task = await Task.getById(taskId);
+    if (!task) {
+      throw new Error("Task not found");
+    }
+
+    const now = new Date();
+    let remainingSeconds = null;
+    let elapsed = 0;
+
+    if (task.timerStartedAt && task.durationSeconds) {
+      const startTime = new Date(task.timerStartedAt);
+      elapsed = Math.floor((now - startTime) / 1000);
+      remainingSeconds = Math.max(0, task.durationSeconds - elapsed);
+
+      // Auto-complete if timer has expired
+      if (remainingSeconds === 0 && task.timerStatus === "running") {
+        // Mark task as completed
+        if (task.frequency) {
+          await Task.markComplete(taskId);
+        } else {
+          await Task.update(taskId, {
+            text: task.text,
+            completed: true,
+            timerStatus: "completed",
+          });
+        }
+      }
+    }
+
+    return {
+      taskId,
+      status: task.timerStatus,
+      durationSeconds: task.durationSeconds,
+      startedAt: task.timerStartedAt,
+      elapsed,
+      remainingSeconds,
+      isExpired: remainingSeconds === 0 && task.timerStatus === "running",
+    };
+  }
+
+  // Instance timer methods
+  async startTimer() {
+    return await Task.startTimer(this.id);
+  }
+
+  async pauseTimer() {
+    return await Task.pauseTimer(this.id);
+  }
+
+  async stopTimer() {
+    return await Task.stopTimer(this.id);
+  }
+
+  async getTimerStatus() {
+    return await Task.getTimerStatus(this.id);
+  }
+
   toJSON() {
     return {
       id: this.id,
@@ -395,6 +530,9 @@ class Task {
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       frequency: this.frequency,
+      durationSeconds: this.durationSeconds,
+      timerStartedAt: this.timerStartedAt,
+      timerStatus: this.timerStatus,
     };
   }
 }

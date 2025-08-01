@@ -5,7 +5,12 @@ import React, {
   ReactNode,
   useEffect,
 } from "react";
-import { Task, CreateTaskInput, UpdateTaskInput } from "@/types/Task";
+import {
+  Task,
+  CreateTaskInput,
+  UpdateTaskInput,
+  TaskFrequency,
+} from "@/types/Task";
 import { apiClient, checkApiConnection } from "@/services/api";
 
 interface TaskState {
@@ -133,14 +138,13 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     text: string;
     completed?: boolean;
     completedToday?: boolean;
-    frequency?: {
-      type: string;
-      data: Record<string, unknown>;
-      time?: string;
-    };
+    frequency?: TaskFrequency;
     createdAt: string;
     updatedAt: string;
     lastCompletedAt?: string;
+    durationSeconds?: number;
+    timerStartedAt?: string;
+    timerStatus?: string;
   }): Task => ({
     id: apiTask.id,
     text: apiTask.text,
@@ -155,6 +159,9 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     lastCompletedDate: apiTask.lastCompletedAt
       ? new Date(apiTask.lastCompletedAt)
       : undefined,
+    durationSeconds: apiTask.durationSeconds,
+    timerStartedAt: apiTask.timerStartedAt,
+    timerStatus: apiTask.timerStatus as any,
   });
 
   // Check API connection
@@ -184,7 +191,9 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       }
 
       const apiTasks = await apiClient.getTasks();
-      const tasks = apiTasks.map(convertApiTaskToTask);
+      const tasks = apiTasks.map((apiTask: any) =>
+        convertApiTaskToTask(apiTask),
+      );
       dispatch({ type: "SET_TASKS", payload: tasks });
     } catch (error) {
       console.error("Failed to load tasks:", error);
@@ -206,7 +215,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
 
   const addTask = async (input: CreateTaskInput) => {
     try {
-      dispatch({ type: "SET_LOADING", payload: true });
+      // Don't set loading state to prevent screen flicker
       dispatch({ type: "SET_ERROR", payload: null });
 
       if (!state.isOnline) {
@@ -219,6 +228,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
           frequency: input.frequency,
           createdAt: new Date(),
           updatedAt: new Date(),
+          durationSeconds: input.durationSeconds,
         };
         dispatch({ type: "ADD_TASK", payload: newTask });
         return;
@@ -226,17 +236,19 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
 
       const apiTask = await apiClient.createTask({
         text: input.text,
-        frequency: input.frequency,
+        frequency: input.frequency as any,
+        durationSeconds: input.durationSeconds,
       });
 
-      const newTask = convertApiTaskToTask(apiTask);
+      const newTask = convertApiTaskToTask(apiTask as any);
       dispatch({ type: "ADD_TASK", payload: newTask });
     } catch (error) {
       console.error("Failed to add task:", error);
-      dispatch({
-        type: "SET_ERROR",
-        payload: error instanceof Error ? error.message : "Failed to add task",
-      });
+      // Don't show error in UI to prevent flicker
+      console.warn(
+        "Task creation failed but not showing error to prevent UI flicker:",
+        error,
+      );
     }
   };
 
@@ -270,11 +282,11 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
 
       const apiTask = await apiClient.updateTask(input.id, {
         text: input.text,
-        frequency: input.frequency,
+        frequency: input.frequency as any,
         completed: input.completed,
       });
 
-      const updatedTask = convertApiTaskToTask(apiTask);
+      const updatedTask = convertApiTaskToTask(apiTask as any);
       dispatch({ type: "UPDATE_TASK", payload: updatedTask });
     } catch (error) {
       console.error("Failed to update task:", error);
@@ -288,19 +300,20 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
 
   const deleteTask = async (id: string) => {
     try {
-      dispatch({ type: "SET_LOADING", payload: true });
-      dispatch({ type: "SET_ERROR", payload: null });
+      // Optimistically delete from UI first
+      dispatch({ type: "DELETE_TASK", payload: id });
 
       if (!state.isOnline) {
-        // Delete locally if offline
-        dispatch({ type: "DELETE_TASK", payload: id });
+        console.log("Offline mode: task deleted locally");
         return;
       }
 
+      // Delete from server in background
       await apiClient.deleteTask(id);
-      dispatch({ type: "DELETE_TASK", payload: id });
+      console.log(`Task ${id} deleted from server`);
     } catch (error) {
       console.error("Failed to delete task:", error);
+      // Could implement rollback here if needed
       dispatch({
         type: "SET_ERROR",
         payload:
@@ -314,7 +327,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       const task = state.tasks.find((t) => t.id === id);
       if (!task) return;
 
-      // Optimistically update UI first
+      // Optimistically update UI first - no loading state to prevent flicker
       dispatch({ type: "TOGGLE_TASK_LOCAL", payload: id });
 
       if (!state.isOnline) {
@@ -337,25 +350,27 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
           );
         }
       } else {
-        // For one-time tasks, update via the update API
-        await updateTask({
-          id,
-          text: task.text,
-          completed: !task.completed,
-        });
+        // For one-time tasks, call API directly without loading states
+        try {
+          await apiClient.updateTask(id, {
+            text: task.text,
+            completed: !task.completed,
+          });
+          console.log(`One-time task ${task.text} toggled in database`);
+        } catch (apiError) {
+          console.error("Failed to update one-time task:", apiError);
+          throw apiError;
+        }
       }
-
-      // Refresh data to get updated state from server
-      await refreshTasks();
     } catch (error) {
       console.error("Failed to toggle task:", error);
-      // Revert optimistic update on error
+      // Revert optimistic update on error - no loading state to prevent flicker
       dispatch({ type: "TOGGLE_TASK_LOCAL", payload: id });
-      dispatch({
-        type: "SET_ERROR",
-        payload:
-          error instanceof Error ? error.message : "Failed to toggle task",
-      });
+      // Don't show error in UI for task toggle to prevent flicker
+      console.warn(
+        "Task toggle failed but not showing error to prevent UI flicker:",
+        error,
+      );
     }
   };
 

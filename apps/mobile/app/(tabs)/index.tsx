@@ -5,6 +5,7 @@ import {
   Platform,
   ActivityIndicator,
   View,
+  Modal,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -19,6 +20,7 @@ import { AddTaskForm } from "@/components/tasks/AddTaskForm";
 import { TaskList } from "@/components/tasks/TaskList";
 import { FloatingActionButton } from "@/components/tasks/FloatingActionButton";
 import { Button, IconButton } from "@/components/ui/Button";
+import { NetworkDebug } from "@/components/NetworkDebug";
 import { useTask } from "@/contexts/TaskContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { Colors } from "@/constants/Colors";
@@ -33,6 +35,7 @@ export default function HomeScreen() {
   const [isAddTaskModalVisible, setIsAddTaskModalVisible] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showNetworkDebug, setShowNetworkDebug] = useState(false);
   const { resetDailyTasks, refreshTasks, state } = useTask();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
@@ -171,6 +174,12 @@ export default function HomeScreen() {
                   variant="ghost"
                   size="small"
                   disabled={state.loading}
+                />
+                <IconButton
+                  onPress={() => setShowNetworkDebug(true)}
+                  icon={<ThemedText style={styles.refreshIcon}>🔍</ThemedText>}
+                  variant="ghost"
+                  size="small"
                 />
                 <Button
                   title="Reset Day"
@@ -324,7 +333,10 @@ export default function HomeScreen() {
       </ScrollView>
 
       {/* Floating Action Button */}
-      <FloatingActionButton onPress={openAddTaskModal} />
+      <FloatingActionButton
+        onPress={openAddTaskModal}
+        modalVisible={isAddTaskModalVisible}
+      />
 
       {/* Add Task Modal */}
       <AddTaskForm
@@ -375,6 +387,24 @@ export default function HomeScreen() {
           </View>
         </View>
       )}
+
+      {/* Network Debug Modal */}
+      <Modal
+        visible={showNetworkDebug}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowNetworkDebug(false)}
+      >
+        <View style={styles.debugModalHeader}>
+          <IconButton
+            onPress={() => setShowNetworkDebug(false)}
+            icon={<ThemedText style={styles.closeIcon}>✕</ThemedText>}
+            variant="ghost"
+            size="medium"
+          />
+        </View>
+        <NetworkDebug />
+      </Modal>
     </ThemedView>
   );
 }
@@ -458,8 +488,7 @@ const styles = StyleSheet.create({
   },
   progressBarFill: {
     height: "100%",
-    borderRadius: 3,
-    transition: "width 0.3s ease",
+    borderRadius: BorderRadius.sm,
   },
   errorContainer: {
     padding: Spacing.md,
@@ -538,5 +567,17 @@ const styles = StyleSheet.create({
   },
   confirmButton: {
     flex: 1,
+  },
+  debugModalHeader: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    padding: 16,
+    paddingTop: 48,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e1e1e1",
+  },
+  closeIcon: {
+    fontSize: 18,
+    fontWeight: "600",
   },
 });

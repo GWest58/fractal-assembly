@@ -9,6 +9,7 @@ import {
   Animated,
   KeyboardAvoidingView,
   Platform,
+  Easing,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -110,21 +111,32 @@ export const FrequencySelector: React.FC<FrequencySelectorProps> = ({
   const [selectedTime, setSelectedTime] = useState<string>(
     initialFrequency?.time || "09:00",
   );
-
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? "light"];
 
-  // Animations
-  const slideAnim = useRef(new Animated.Value(0)).current;
+  // Simple slide animation
+  const slideAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
+  // Animation refs for sliding options
+  const specificDaysAnim = useRef(new Animated.Value(0)).current;
+  const timesPerWeekAnim = useRef(new Animated.Value(0)).current;
+  const timesPerMonthAnim = useRef(new Animated.Value(0)).current;
+
+  // Simple slide animation
   useEffect(() => {
     if (visible) {
+      // Reset to starting position
+      slideAnim.setValue(1);
+      fadeAnim.setValue(0);
+
+      // Animate in
       Animated.parallel([
         Animated.timing(slideAnim, {
-          toValue: 1,
+          toValue: 0,
           duration: 300,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(fadeAnim, {
@@ -134,10 +146,12 @@ export const FrequencySelector: React.FC<FrequencySelectorProps> = ({
         }),
       ]).start();
     } else {
+      // Animate out
       Animated.parallel([
         Animated.timing(slideAnim, {
-          toValue: 0,
+          toValue: 1,
           duration: 250,
+          easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(fadeAnim, {
@@ -245,8 +259,63 @@ export const FrequencySelector: React.FC<FrequencySelectorProps> = ({
 
   const slideTransform = slideAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [300, 0],
+    outputRange: [0, 600],
   });
+
+  const handleFrequencyTypeSelect = (optionKey: FrequencyType | "once") => {
+    const previousType = selectedType;
+    setSelectedType(optionKey);
+
+    // Animate out previous option
+    if (previousType === "specific_days") {
+      Animated.timing(specificDaysAnim, {
+        toValue: 0,
+        duration: 250,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: false,
+      }).start();
+    } else if (previousType === "times_per_week") {
+      Animated.timing(timesPerWeekAnim, {
+        toValue: 0,
+        duration: 250,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: false,
+      }).start();
+    } else if (previousType === "times_per_month") {
+      Animated.timing(timesPerMonthAnim, {
+        toValue: 0,
+        duration: 250,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: false,
+      }).start();
+    }
+
+    // Animate in new option
+    setTimeout(() => {
+      if (optionKey === "specific_days") {
+        Animated.spring(specificDaysAnim, {
+          toValue: 1,
+          tension: 100,
+          friction: 8,
+          useNativeDriver: false,
+        }).start();
+      } else if (optionKey === "times_per_week") {
+        Animated.spring(timesPerWeekAnim, {
+          toValue: 1,
+          tension: 100,
+          friction: 8,
+          useNativeDriver: false,
+        }).start();
+      } else if (optionKey === "times_per_month") {
+        Animated.spring(timesPerMonthAnim, {
+          toValue: 1,
+          tension: 100,
+          friction: 8,
+          useNativeDriver: false,
+        }).start();
+      }
+    }, 100);
+  };
 
   const renderFrequencyOptions = () => (
     <View style={styles.section}>
@@ -255,32 +324,130 @@ export const FrequencySelector: React.FC<FrequencySelectorProps> = ({
         {FREQUENCY_OPTIONS.map((option) => {
           const isSelected = selectedType === option.key;
           return (
+            <View key={option.key} style={styles.frequencyOptionContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.frequencyOption,
+                  {
+                    backgroundColor: isSelected
+                      ? colors.primary + "15"
+                      : colors.backgroundSecondary,
+                    borderColor: isSelected ? colors.primary : colors.border,
+                  },
+                ]}
+                onPress={() => handleFrequencyTypeSelect(option.key)}
+                activeOpacity={0.7}
+              >
+                <ThemedText style={styles.optionIcon}>{option.icon}</ThemedText>
+                <Callout
+                  style={[
+                    styles.optionLabel,
+                    { color: isSelected ? colors.primary : colors.text },
+                  ]}
+                >
+                  {option.label}
+                </Callout>
+                <Caption1
+                  hierarchy="secondary"
+                  style={styles.optionDescription}
+                >
+                  {option.description}
+                </Caption1>
+              </TouchableOpacity>
+
+              {/* Render inline options for specific days */}
+              {option.key === "specific_days" && (
+                <Animated.View
+                  style={[
+                    styles.inlineOptionsContainer,
+                    {
+                      maxHeight: specificDaysAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, 500],
+                      }),
+                      opacity: specificDaysAnim,
+                    },
+                  ]}
+                >
+                  {renderSpecificDaysInline()}
+                </Animated.View>
+              )}
+
+              {/* Render inline options for times per week */}
+              {option.key === "times_per_week" && (
+                <Animated.View
+                  style={[
+                    styles.inlineOptionsContainer,
+                    {
+                      maxHeight: timesPerWeekAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, 400],
+                      }),
+                      opacity: timesPerWeekAnim,
+                    },
+                  ]}
+                >
+                  {renderCountSelectorInline()}
+                </Animated.View>
+              )}
+
+              {/* Render inline options for times per month */}
+              {option.key === "times_per_month" && (
+                <Animated.View
+                  style={[
+                    styles.inlineOptionsContainer,
+                    {
+                      maxHeight: timesPerMonthAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, 400],
+                      }),
+                      opacity: timesPerMonthAnim,
+                    },
+                  ]}
+                >
+                  {renderCountSelectorInline()}
+                </Animated.View>
+              )}
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+
+  const renderSpecificDaysInline = () => (
+    <View style={styles.inlineSection}>
+      <Caption1 hierarchy="secondary" style={styles.inlineSectionTitle}>
+        Select Days
+      </Caption1>
+      <View style={styles.daysGrid}>
+        {DAYS_OF_WEEK.map((day) => {
+          const isSelected = selectedDays.includes(day.key);
+          return (
             <TouchableOpacity
-              key={option.key}
+              key={day.key}
               style={[
-                styles.frequencyOption,
+                styles.dayButton,
+                styles.inlineDayButton,
                 {
                   backgroundColor: isSelected
-                    ? colors.primary + "15"
+                    ? colors.primary
                     : colors.backgroundSecondary,
                   borderColor: isSelected ? colors.primary : colors.border,
                 },
               ]}
-              onPress={() => setSelectedType(option.key)}
+              onPress={() => toggleDay(day.key)}
               activeOpacity={0.7}
             >
-              <ThemedText style={styles.optionIcon}>{option.icon}</ThemedText>
-              <Callout
+              <Caption2
                 style={[
-                  styles.optionLabel,
-                  { color: isSelected ? colors.primary : colors.text },
+                  styles.dayShort,
+                  styles.inlineDayText,
+                  { color: isSelected ? "#FFFFFF" : colors.text },
                 ]}
               >
-                {option.label}
-              </Callout>
-              <Caption1 hierarchy="secondary" style={styles.optionDescription}>
-                {option.description}
-              </Caption1>
+                {day.short}
+              </Caption2>
             </TouchableOpacity>
           );
         })}
@@ -288,6 +455,7 @@ export const FrequencySelector: React.FC<FrequencySelectorProps> = ({
     </View>
   );
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const renderSpecificDaysSelector = () => {
     if (selectedType !== "specific_days") return null;
 
@@ -336,6 +504,57 @@ export const FrequencySelector: React.FC<FrequencySelectorProps> = ({
     );
   };
 
+  const renderCountSelectorInline = () => {
+    const unitLabel =
+      selectedType === "times_per_week" ? "per week" : "per month";
+
+    return (
+      <View style={styles.inlineSection}>
+        <Caption1 hierarchy="secondary" style={styles.inlineSectionTitle}>
+          How Many Times
+        </Caption1>
+        <View
+          style={[
+            styles.countSelector,
+            styles.inlineCountSelector,
+            {
+              backgroundColor: colors.backgroundSecondary,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <IconButton
+            onPress={() => handleTimeCountChange(false)}
+            icon={
+              <ThemedText style={[styles.countButton, { color: colors.text }]}>
+                −
+              </ThemedText>
+            }
+            variant="ghost"
+            size="small"
+            disabled={timesCount <= 1}
+          />
+          <View style={styles.countDisplay}>
+            <Callout style={styles.countNumber}>{timesCount}</Callout>
+            <Caption2 hierarchy="secondary">{unitLabel}</Caption2>
+          </View>
+          <IconButton
+            onPress={() => handleTimeCountChange(true)}
+            icon={
+              <ThemedText style={[styles.countButton, { color: colors.text }]}>
+                +
+              </ThemedText>
+            }
+            variant="ghost"
+            size="small"
+            disabled={timesCount >= 10}
+          />
+        </View>
+      </View>
+    );
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const renderCountSelector = () => {
     if (selectedType !== "times_per_week" && selectedType !== "times_per_month")
       return null;
@@ -367,12 +586,8 @@ export const FrequencySelector: React.FC<FrequencySelectorProps> = ({
             disabled={timesCount <= 1}
           />
           <View style={styles.countDisplay}>
-            <ThemedText type="title3" style={styles.countNumber}>
-              {timesCount}
-            </ThemedText>
-            <Caption1 hierarchy="secondary" style={styles.countUnit}>
-              {unitLabel}
-            </Caption1>
+            <Headline style={styles.countNumber}>{timesCount}</Headline>
+            <Caption1 hierarchy="secondary">{unitLabel}</Caption1>
           </View>
           <IconButton
             onPress={() => handleTimeCountChange(true)}
@@ -383,7 +598,7 @@ export const FrequencySelector: React.FC<FrequencySelectorProps> = ({
             }
             variant="ghost"
             size="small"
-            disabled={timesCount >= 31}
+            disabled={timesCount >= 10}
           />
         </View>
       </View>
@@ -581,9 +796,9 @@ export const FrequencySelector: React.FC<FrequencySelectorProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerContent}>
-              <Title2 style={styles.title}>Frequency Settings</Title2>
+              <Title2 style={styles.title}>Frequency</Title2>
               <Caption1 hierarchy="secondary" style={styles.subtitle}>
-                How often should this task repeat?
+                Choose when to repeat this task
               </Caption1>
             </View>
             <IconButton
@@ -603,10 +818,9 @@ export const FrequencySelector: React.FC<FrequencySelectorProps> = ({
           <ScrollView
             style={styles.content}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
             {renderFrequencyOptions()}
-            {renderSpecificDaysSelector()}
-            {renderCountSelector()}
             {renderTimeSelector()}
             {renderPreview()}
           </ScrollView>
@@ -698,7 +912,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   optionsGrid: {
-    gap: Spacing.md,
+    // Removed gap to use consistent margins instead
   },
   frequencyOption: {
     padding: Spacing.lg,
@@ -722,17 +936,49 @@ const styles = StyleSheet.create({
   },
   daysGrid: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: Spacing.sm,
+    justifyContent: "space-between",
+    paddingHorizontal: 2,
   },
   dayButton: {
     paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.sm,
+    paddingHorizontal: 2,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     alignItems: "center",
-    minWidth: 80,
+    width: 38,
     ...Shadows.small,
+  },
+  inlineOptionsContainer: {
+    overflow: "hidden",
+    marginTop: Spacing.sm,
+    marginBottom: 0,
+  },
+  frequencyOptionContainer: {
+    marginBottom: Spacing.xl,
+  },
+  inlineSection: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.md,
+    backgroundColor: "rgba(0,0,0,0.02)",
+    borderRadius: BorderRadius.md,
+    minHeight: 100,
+  },
+  inlineSectionTitle: {
+    marginBottom: Spacing.sm,
+    fontWeight: "600",
+  },
+  inlineDayButton: {
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: 0,
+    minHeight: 26,
+    width: 32,
+  },
+  inlineDayText: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  inlineCountSelector: {
+    paddingVertical: Spacing.sm,
   },
   dayShort: {
     fontWeight: "700",

@@ -50,7 +50,7 @@ router.get("/:id", async (req, res) => {
 // POST /api/tasks - Create a new task
 router.post("/", async (req, res) => {
   try {
-    const { text, frequency } = req.body;
+    const { text, frequency, durationSeconds } = req.body;
 
     // Validation
     if (!text || !text.trim()) {
@@ -63,6 +63,7 @@ router.post("/", async (req, res) => {
     const taskData = {
       text: text.trim(),
       frequency: frequency, // Don't default to daily for one-time tasks
+      durationSeconds: durationSeconds,
     };
 
     const task = await Task.create(taskData);
@@ -84,7 +85,7 @@ router.post("/", async (req, res) => {
 // PUT /api/tasks/:id - Update a task
 router.put("/:id", async (req, res) => {
   try {
-    const { text, frequency, completed } = req.body;
+    const { text, frequency, completed, durationSeconds } = req.body;
     const taskId = req.params.id;
 
     // Check if task exists
@@ -125,6 +126,11 @@ router.put("/:id", async (req, res) => {
     // Handle completed field for one-time tasks
     if (completed !== undefined) {
       updateData.completed = completed;
+    }
+
+    // Handle duration updates
+    if (durationSeconds !== undefined) {
+      updateData.durationSeconds = durationSeconds;
     }
 
     const updatedTask = await Task.update(taskId, updateData);
@@ -373,6 +379,89 @@ router.post("/reset-day", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to reset day",
+      message: error.message,
+    });
+  }
+});
+
+// POST /api/tasks/:id/timer/start - Start timer for a task
+router.post("/:id/timer/start", async (req, res) => {
+  try {
+    const taskId = req.params.id;
+
+    const task = await Task.startTimer(taskId);
+    res.json({
+      success: true,
+      data: task,
+      message: "Timer started successfully",
+    });
+  } catch (error) {
+    console.error("Error starting timer:", error);
+    res.status(400).json({
+      success: false,
+      error: "Failed to start timer",
+      message: error.message,
+    });
+  }
+});
+
+// POST /api/tasks/:id/timer/pause - Pause timer for a task
+router.post("/:id/timer/pause", async (req, res) => {
+  try {
+    const taskId = req.params.id;
+
+    const task = await Task.pauseTimer(taskId);
+    res.json({
+      success: true,
+      data: task,
+      message: "Timer paused successfully",
+    });
+  } catch (error) {
+    console.error("Error pausing timer:", error);
+    res.status(400).json({
+      success: false,
+      error: "Failed to pause timer",
+      message: error.message,
+    });
+  }
+});
+
+// POST /api/tasks/:id/timer/stop - Stop timer for a task
+router.post("/:id/timer/stop", async (req, res) => {
+  try {
+    const taskId = req.params.id;
+
+    const task = await Task.stopTimer(taskId);
+    res.json({
+      success: true,
+      data: task,
+      message: "Timer stopped successfully",
+    });
+  } catch (error) {
+    console.error("Error stopping timer:", error);
+    res.status(400).json({
+      success: false,
+      error: "Failed to stop timer",
+      message: error.message,
+    });
+  }
+});
+
+// GET /api/tasks/:id/timer/status - Get timer status for a task
+router.get("/:id/timer/status", async (req, res) => {
+  try {
+    const taskId = req.params.id;
+
+    const timerStatus = await Task.getTimerStatus(taskId);
+    res.json({
+      success: true,
+      data: timerStatus,
+    });
+  } catch (error) {
+    console.error("Error fetching timer status:", error);
+    res.status(400).json({
+      success: false,
+      error: "Failed to fetch timer status",
       message: error.message,
     });
   }
