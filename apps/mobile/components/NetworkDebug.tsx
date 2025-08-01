@@ -165,8 +165,8 @@ export const NetworkDebug: React.FC = () => {
           Debug Information
         </Headline>
         <Body style={[styles.debugText, { color: colors.text }]}>
-          Platform: {(debugInfo as Record<string, unknown>).platform}{" "}
-          {(debugInfo as Record<string, unknown>).version}
+          Platform: {String((debugInfo as Record<string, unknown>).platform)}{" "}
+          {String((debugInfo as Record<string, unknown>).version)}
         </Body>
         <Body style={[styles.debugText, { color: colors.text }]}>
           Environment:{" "}
@@ -175,7 +175,8 @@ export const NetworkDebug: React.FC = () => {
             : "Production"}
         </Body>
         <Body style={[styles.debugText, { color: colors.text }]}>
-          API Base URL: {(debugInfo as Record<string, unknown>).apiBaseUrl}
+          API Base URL:{" "}
+          {String((debugInfo as Record<string, unknown>).apiBaseUrl)}
         </Body>
         {lastRun && (
           <Body style={[styles.debugText, { color: colors.text }]}>

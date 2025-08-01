@@ -60,7 +60,11 @@ class ApiClient {
 
   constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl;
-    console.log(`API Client initialized with base URL: ${this.baseUrl}`);
+    console.log(`🔧 API Client initialized with base URL: ${this.baseUrl}`);
+    console.log(`🔧 Environment: ${__DEV__ ? "development" : "production"}`);
+    console.log(
+      `🔧 Platform: ${typeof window !== "undefined" ? "web" : "mobile"}`,
+    );
   }
 
   private async request<T>(
@@ -128,6 +132,7 @@ class ApiClient {
       time?: string;
     };
     durationSeconds?: number;
+    projectId?: string;
   }): Promise<Task> {
     const response = await this.request<ApiResponse<Task>>("/tasks", {
       method: "POST",

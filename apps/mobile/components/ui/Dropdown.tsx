@@ -38,7 +38,7 @@ export function Dropdown({
   const [dropdownTop, setDropdownTop] = useState(0);
   const [dropdownLeft, setDropdownLeft] = useState(0);
   const [dropdownWidth, setDropdownWidth] = useState(0);
-  const buttonRef = useRef<TouchableOpacity>(null);
+  const buttonRef = useRef<any>(null);
   const colorScheme = useColorScheme();
 
   const selectedOption = options.find((option) => option.value === value);
@@ -46,12 +46,21 @@ export function Dropdown({
   const openDropdown = () => {
     if (disabled) return;
 
-    buttonRef.current?.measure((fx, fy, width, height, px, py) => {
-      setDropdownTop(py + height);
-      setDropdownLeft(px);
-      setDropdownWidth(width);
-      setIsVisible(true);
-    });
+    buttonRef.current?.measure(
+      (
+        fx: number,
+        fy: number,
+        width: number,
+        height: number,
+        px: number,
+        py: number,
+      ) => {
+        setDropdownTop(py + height);
+        setDropdownLeft(px);
+        setDropdownWidth(width);
+        setIsVisible(true);
+      },
+    );
   };
 
   const closeDropdown = () => {
