@@ -1,11 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import {
-  View,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  Platform,
-} from "react-native";
+import { View, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import * as Haptics from "expo-haptics";
@@ -45,11 +39,22 @@ export const InlineTimer: React.FC<InlineTimerProps> = React.memo(
     const colorScheme = useColorScheme();
     const colors = Colors[colorScheme ?? "light"];
 
-    // Update timer display every second when running
+    // Local countdown timer - no API polling
     useEffect(() => {
-      if (currentStatus === "running") {
+      if (currentStatus === "running" && timeRemaining > 0) {
         intervalRef.current = setInterval(() => {
-          updateTimerStatus();
+          setTimeRemaining((prev) => {
+            const newTime = prev - 1;
+            setElapsed((prevElapsed) => prevElapsed + 1);
+
+            // Check if timer completed
+            if (newTime <= 0) {
+              setCurrentStatus("completed");
+              notificationSentRef.current = false; // Allow notification
+              return 0;
+            }
+            return newTime;
+          });
         }, 1000);
       } else {
         if (intervalRef.current) {
@@ -63,6 +68,14 @@ export const InlineTimer: React.FC<InlineTimerProps> = React.memo(
           clearInterval(intervalRef.current);
         }
       };
+    }, [currentStatus, timeRemaining]);
+
+    // Handle timer completion
+    useEffect(() => {
+      if (currentStatus === "completed" && !notificationSentRef.current) {
+        notificationSentRef.current = true;
+        playTimerCompleteNotification();
+      }
     }, [currentStatus]);
 
     // Clean up interval on unmount
@@ -113,9 +126,6 @@ export const InlineTimer: React.FC<InlineTimerProps> = React.memo(
           Haptics.NotificationFeedbackType.Success,
         );
 
-        // Try multiple sound approaches
-        let soundPlayed = false;
-
         // Play sound if available
         if (soundRef.current) {
           try {
@@ -158,44 +168,30 @@ export const InlineTimer: React.FC<InlineTimerProps> = React.memo(
       }
     };
 
-    const updateTimerStatus = useCallback(async () => {
+    // Only sync status with server, don't use for countdown
+    const syncTimerStatus = useCallback(async () => {
       try {
-        const status = await TimerService.getTimerStatus(taskId);
-
-        // Only update state if values actually changed to prevent flicker
-        if (status.status !== currentStatus) {
-          setCurrentStatus(status.status);
-        }
-        if (status.elapsed !== elapsed) {
-          setElapsed(status.elapsed);
-        }
-        if ((status.remainingSeconds || 0) !== timeRemaining) {
-          setTimeRemaining(status.remainingSeconds || 0);
-        }
-
         if (onTimerUpdate) {
-          onTimerUpdate(status);
-        }
-
-        // Check if timer completed
-        if (status.isExpired && !notificationSentRef.current) {
-          notificationSentRef.current = true;
-
-          // Play sound and haptic feedback FIRST, before any other callbacks
-          await playTimerCompleteNotification();
-
-          // onTimerComplete will be called when user dismisses alert
+          const mockStatus = {
+            taskId,
+            status: currentStatus,
+            durationSeconds: durationSeconds || 0,
+            elapsed,
+            remainingSeconds: timeRemaining,
+            isExpired: currentStatus === "completed",
+          };
+          onTimerUpdate(mockStatus);
         }
       } catch (error) {
-        console.error("Failed to update timer status:", error);
+        console.error("Failed to sync timer status:", error);
       }
     }, [
       taskId,
       currentStatus,
       elapsed,
       timeRemaining,
+      durationSeconds,
       onTimerUpdate,
-      onTimerComplete,
     ]);
 
     const handleStartTimer = async () => {
@@ -206,7 +202,12 @@ export const InlineTimer: React.FC<InlineTimerProps> = React.memo(
         notificationSentRef.current = false; // Reset notification flag when starting
         await TimerService.startTimer(taskId);
         setCurrentStatus("running");
-        await updateTimerStatus();
+        // Reset timer to full duration if not already set
+        if (timeRemaining <= 0) {
+          setTimeRemaining(durationSeconds || 0);
+          setElapsed(0);
+        }
+        await syncTimerStatus();
       } catch (error) {
         console.error("Failed to start timer:", error);
       } finally {
@@ -219,7 +220,7 @@ export const InlineTimer: React.FC<InlineTimerProps> = React.memo(
       try {
         await TimerService.pauseTimer(taskId);
         setCurrentStatus("paused");
-        await updateTimerStatus();
+        await syncTimerStatus();
       } catch (error) {
         console.error("Failed to pause timer:", error);
       } finally {
@@ -235,7 +236,7 @@ export const InlineTimer: React.FC<InlineTimerProps> = React.memo(
         setTimeRemaining(durationSeconds || 0);
         setElapsed(0);
         notificationSentRef.current = false; // Reset notification flag
-        await updateTimerStatus();
+        await syncTimerStatus();
       } catch (error) {
         console.error("Failed to stop timer:", error);
       } finally {
