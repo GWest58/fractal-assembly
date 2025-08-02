@@ -148,78 +148,65 @@ class Task {
 
   // Completion tracking methods
   static async markComplete(taskId, completedAt = new Date()) {
-    const completionDate = completedAt.toISOString().split("T")[0]; // YYYY-MM-DD
     const completionId = uuidv4();
 
     const sql = `
       INSERT OR REPLACE INTO task_completions
-      (id, task_id, completed_at, completion_date)
-      VALUES (?, ?, ?, ?)
+      (id, task_id, completed_at)
+      VALUES (?, ?, ?)
     `;
-    const params = [
-      completionId,
-      taskId,
-      completedAt.toISOString(),
-      completionDate,
-    ];
+    const params = [completionId, taskId, completedAt.toISOString()];
 
     await database.run(sql, params);
     return {
       id: completionId,
       taskId,
       completedAt: completedAt.toISOString(),
-      completionDate,
     };
   }
 
-  static async markIncomplete(taskId, date = new Date()) {
-    const completionDate = date.toISOString().split("T")[0];
+  static async markIncomplete(taskId, startOfDay, endOfDay) {
     const sql = `
       DELETE FROM task_completions
-      WHERE task_id = ? AND completion_date = ?
+      WHERE task_id = ? AND completed_at >= ? AND completed_at < ?
     `;
-    const result = await database.run(sql, [taskId, completionDate]);
+    const result = await database.run(sql, [taskId, startOfDay, endOfDay]);
     return result.changes > 0;
   }
 
-  static async getCompletionsForDate(date = new Date()) {
-    const completionDate = date.toISOString().split("T")[0];
+  static async getCompletionsForDate(startOfDay, endOfDay) {
     const sql = `
       SELECT tc.*, t.text
       FROM task_completions tc
       JOIN tasks t ON tc.task_id = t.id
-      WHERE tc.completion_date = ?
+      WHERE tc.completed_at >= ? AND tc.completed_at < ?
       ORDER BY tc.completed_at ASC
     `;
-    return await database.all(sql, [completionDate]);
+    return await database.all(sql, [startOfDay, endOfDay]);
   }
 
-  static async getCompletionsForDateRange(startDate, endDate) {
-    const start = startDate.toISOString().split("T")[0];
-    const end = endDate.toISOString().split("T")[0];
+  static async getCompletionsForDateRange(startOfPeriod, endOfPeriod) {
     const sql = `
       SELECT tc.*, t.text
       FROM task_completions tc
       JOIN tasks t ON tc.task_id = t.id
-      WHERE tc.completion_date BETWEEN ? AND ?
-      ORDER BY tc.completion_date DESC, tc.completed_at ASC
+      WHERE tc.completed_at >= ? AND tc.completed_at < ?
+      ORDER BY tc.completed_at DESC
     `;
-    return await database.all(sql, [start, end]);
+    return await database.all(sql, [startOfPeriod, endOfPeriod]);
   }
 
-  static async isCompletedToday(taskId, date = new Date()) {
-    const completionDate = date.toISOString().split("T")[0];
+  static async isCompletedToday(taskId, startOfDay, endOfDay) {
     const sql = `
       SELECT COUNT(*) as count
       FROM task_completions
-      WHERE task_id = ? AND completion_date = ?
+      WHERE task_id = ? AND completed_at >= ? AND completed_at < ?
     `;
-    const result = await database.get(sql, [taskId, completionDate]);
+    const result = await database.get(sql, [taskId, startOfDay, endOfDay]);
     return result.count > 0;
   }
 
-  static async getTasksWithTodayStatus(date = new Date()) {
-    const completionDate = date.toISOString().split("T")[0];
+  static async getTasksWithTodayStatus(startOfDay, endOfDay) {
     const sql = `
       SELECT
         t.id,
@@ -237,16 +224,18 @@ class Task {
         CASE WHEN tc.id IS NOT NULL THEN 1 ELSE 0 END as completed_today,
         tc.completed_at as last_completed_at
       FROM tasks t
-      LEFT JOIN task_completions tc ON t.id = tc.task_id AND tc.completion_date = ?
+      LEFT JOIN task_completions tc ON t.id = tc.task_id AND tc.completed_at >= ? AND tc.completed_at < ?
       ORDER BY t.created_at ASC
     `;
-    const rows = await database.all(sql, [completionDate]);
+    const rows = await database.all(sql, [startOfDay, endOfDay]);
 
     const tasks = rows.map((row) => new Task(row));
 
     // Filter tasks based on their frequency and return with status
+    // For date filtering, we'll use the current date since we're already filtering by time range
+    const currentDate = new Date();
     return tasks
-      .filter((task) => task.isActiveOnDate(date))
+      .filter((task) => task.isActiveOnDate(currentDate))
       .map((task) => {
         const taskRow = rows.find((r) => r.id === task.id);
 
@@ -275,9 +264,10 @@ class Task {
 
   static async getStreakForTask(taskId) {
     const sql = `
-      SELECT completion_date
+      SELECT DATE(completed_at) as completion_date
       FROM task_completions
       WHERE task_id = ?
+      GROUP BY DATE(completed_at)
       ORDER BY completion_date DESC
     `;
     const completions = await database.all(sql, [taskId]);
@@ -309,16 +299,12 @@ class Task {
     startDate.setDate(startDate.getDate() - days);
 
     const sql = `
-      SELECT COUNT(*) as completed_days
+      SELECT COUNT(DISTINCT DATE(completed_at)) as completed_days
       FROM task_completions
       WHERE task_id = ?
-      AND completion_date BETWEEN ? AND ?
+      AND completed_at >= ? AND completed_at < ?
     `;
-    const params = [
-      taskId,
-      startDate.toISOString().split("T")[0],
-      endDate.toISOString().split("T")[0],
-    ];
+    const params = [taskId, startDate.toISOString(), endDate.toISOString()];
 
     const result = await database.get(sql, params);
     const completedDays = result.completed_days;
@@ -421,8 +407,8 @@ class Task {
     return await Task.markIncomplete(this.id);
   }
 
-  async isCompletedToday() {
-    return await Task.isCompletedToday(this.id);
+  async isCompletedToday(startOfDay, endOfDay) {
+    return await Task.isCompletedToday(this.id, startOfDay, endOfDay);
   }
 
   async getStats(days = 30) {

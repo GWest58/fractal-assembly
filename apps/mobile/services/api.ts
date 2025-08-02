@@ -111,8 +111,18 @@ class ApiClient {
 
   // Task management methods
   async getTasks(date?: string): Promise<Task[]> {
-    const params = date ? `?date=${date}` : "";
-    const response = await this.request<ApiResponse<Task[]>>(`/tasks${params}`);
+    const params = new URLSearchParams();
+    if (date) {
+      params.append("date", date);
+    }
+    // Add timezone offset for proper date range calculation
+    const timezoneOffset = new Date().getTimezoneOffset();
+    params.append("timezoneOffset", timezoneOffset.toString());
+
+    const queryString = params.toString();
+    const response = await this.request<ApiResponse<Task[]>>(
+      `/tasks${queryString ? `?${queryString}` : ""}`,
+    );
     return response.data || [];
   }
 
@@ -180,11 +190,13 @@ class ApiClient {
     taskId: string,
     completedAt?: string,
   ): Promise<TaskCompletion> {
+    const body = completedAt ? { completedAt } : {};
+
     const response = await this.request<ApiResponse<TaskCompletion>>(
       `/tasks/${taskId}/complete`,
       {
         method: "POST",
-        body: JSON.stringify(completedAt ? { completedAt } : {}),
+        body: JSON.stringify(body),
       },
     );
     if (!response.data) {
@@ -194,13 +206,20 @@ class ApiClient {
   }
 
   async markTaskIncomplete(taskId: string, date?: string): Promise<void> {
-    const params = date ? `?date=${date}` : "";
-    await this.request<ApiResponse<void>>(
-      `/tasks/${taskId}/complete${params}`,
-      {
-        method: "DELETE",
-      },
-    );
+    const params = new URLSearchParams();
+    if (date) {
+      params.append("date", date);
+    }
+    // Add timezone offset for proper date range calculation
+    const timezoneOffset = new Date().getTimezoneOffset();
+    params.append("timezoneOffset", timezoneOffset.toString());
+
+    const queryString = params.toString();
+    const url = `/tasks/${taskId}/complete${queryString ? `?${queryString}` : ""}`;
+
+    await this.request<ApiResponse<void>>(url, {
+      method: "DELETE",
+    });
   }
 
   // Statistics methods

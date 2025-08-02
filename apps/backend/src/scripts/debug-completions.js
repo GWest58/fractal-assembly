@@ -28,9 +28,9 @@ try {
       t.*,
       CASE WHEN tc.id IS NOT NULL THEN 1 ELSE 0 END as completed_today,
       tc.completed_at,
-      tc.completion_date
+      DATE(tc.completed_at) as completion_date
     FROM tasks t
-    LEFT JOIN task_completions tc ON t.id = tc.task_id AND tc.completion_date = ?
+    LEFT JOIN task_completions tc ON t.id = tc.task_id AND DATE(tc.completed_at) = ?
     ORDER BY t.created_at ASC
   `,
     )
@@ -59,10 +59,10 @@ try {
   const todayCompletions = db
     .prepare(
       `
-    SELECT tc.*, t.text as task_text
+    SELECT tc.*, t.text as task_text, DATE(tc.completed_at) as completion_date
     FROM task_completions tc
     JOIN tasks t ON tc.task_id = t.id
-    WHERE tc.completion_date = ?
+    WHERE DATE(tc.completed_at) = ?
     ORDER BY tc.completed_at
   `,
     )
@@ -93,11 +93,11 @@ try {
   const recentCompletions = db
     .prepare(
       `
-    SELECT tc.*, t.text as task_text
+    SELECT tc.*, t.text as task_text, DATE(tc.completed_at) as completion_date
     FROM task_completions tc
     JOIN tasks t ON tc.task_id = t.id
-    WHERE tc.completion_date BETWEEN ? AND ?
-    ORDER BY tc.completion_date DESC, tc.completed_at DESC
+    WHERE DATE(tc.completed_at) BETWEEN ? AND ?
+    ORDER BY tc.completed_at DESC
   `,
     )
     .all(sevenDaysAgoStr, today);
@@ -151,13 +151,13 @@ try {
   if (action === "clear-today") {
     console.log(`🧹 Clearing all completions for today (${today})...`);
     const result = db
-      .prepare("DELETE FROM task_completions WHERE completion_date = ?")
+      .prepare("DELETE FROM task_completions WHERE DATE(completed_at) = ?")
       .run(today);
     console.log(`✅ Deleted ${result.changes} completion records for today`);
   } else if (action === "clear-date" && param) {
     console.log(`🧹 Clearing all completions for ${param}...`);
     const result = db
-      .prepare("DELETE FROM task_completions WHERE completion_date = ?")
+      .prepare("DELETE FROM task_completions WHERE DATE(completed_at) = ?")
       .run(param);
     console.log(`✅ Deleted ${result.changes} completion records for ${param}`);
   } else if (action === "clear-all") {

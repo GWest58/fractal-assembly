@@ -1,17 +1,25 @@
 import express from "express";
 import Task from "../models/Task.js";
+import { TimezoneUtils } from "../utils/timezone.js";
 
 const router = express.Router();
 
 // GET /api/tasks - Get all tasks with today's completion status
 router.get("/", async (req, res) => {
   try {
-    const date = req.query.date ? new Date(req.query.date) : new Date();
-    const tasks = await Task.getTasksWithTodayStatus(date);
+    // Parse client date range parameters
+    const { date, timezoneOffset } = req.query;
+    const { startOfDay, endOfDay } = TimezoneUtils.parseClientDateRange({
+      date,
+      timezoneOffset: timezoneOffset ? parseInt(timezoneOffset) : undefined,
+    });
+
+    const tasks = await Task.getTasksWithTodayStatus(startOfDay, endOfDay);
     res.json({
       success: true,
       data: tasks,
-      date: date.toISOString().split("T")[0],
+      date: date || TimezoneUtils.getCurrentLocalDate(),
+      range: { startOfDay, endOfDay },
     });
   } catch (error) {
     console.error("Error fetching tasks:", error);
@@ -222,7 +230,7 @@ router.post("/:id/complete", async (req, res) => {
 router.delete("/:id/complete", async (req, res) => {
   try {
     const taskId = req.params.id;
-    const { date } = req.query;
+    const { date, timezoneOffset } = req.query;
 
     // Check if task exists
     const task = await Task.getById(taskId);
@@ -233,8 +241,13 @@ router.delete("/:id/complete", async (req, res) => {
       });
     }
 
-    const targetDate = date ? new Date(date) : new Date();
-    const removed = await Task.markIncomplete(taskId, targetDate);
+    // Parse client date range
+    const { startOfDay, endOfDay } = TimezoneUtils.parseClientDateRange({
+      date,
+      timezoneOffset: timezoneOffset ? parseInt(timezoneOffset) : undefined,
+    });
+
+    const removed = await Task.markIncomplete(taskId, startOfDay, endOfDay);
 
     if (removed) {
       res.json({
@@ -244,7 +257,7 @@ router.delete("/:id/complete", async (req, res) => {
     } else {
       res.status(404).json({
         success: false,
-        error: "No completion found for this date",
+        error: "No completion found for this date range",
       });
     }
   } catch (error) {
@@ -291,18 +304,25 @@ router.get("/:id/stats", async (req, res) => {
 });
 
 // GET /api/tasks/completions/today - Get all completions for today
+// GET /api/tasks/completions/today - Get today's completions
 router.get("/completions/today", async (req, res) => {
   try {
-    const date = req.query.date ? new Date(req.query.date) : new Date();
-    const completions = await Task.getCompletionsForDate(date);
+    const { date, timezoneOffset } = req.query;
+    const { startOfDay, endOfDay } = TimezoneUtils.parseClientDateRange({
+      date,
+      timezoneOffset: timezoneOffset ? parseInt(timezoneOffset) : undefined,
+    });
+
+    const completions = await Task.getCompletionsForDate(startOfDay, endOfDay);
 
     res.json({
       success: true,
       data: completions,
-      date: date.toISOString().split("T")[0],
+      date: date || TimezoneUtils.getCurrentLocalDate(),
+      range: { startOfDay, endOfDay },
     });
   } catch (error) {
-    console.error("Error fetching today's completions:", error);
+    console.error("Error fetching completions:", error);
     res.status(500).json({
       success: false,
       error: "Failed to fetch completions",
@@ -314,7 +334,7 @@ router.get("/completions/today", async (req, res) => {
 // GET /api/tasks/completions/range - Get completions for a date range
 router.get("/completions/range", async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, timezoneOffset } = req.query;
 
     if (!startDate || !endDate) {
       return res.status(400).json({
@@ -323,29 +343,38 @@ router.get("/completions/range", async (req, res) => {
       });
     }
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    // Parse start of period (beginning of start date)
+    const startRange = TimezoneUtils.parseClientDateRange({
+      date: startDate,
+      timezoneOffset: timezoneOffset ? parseInt(timezoneOffset) : undefined,
+    });
 
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      return res.status(400).json({
-        success: false,
-        error: "Invalid date format. Use YYYY-MM-DD",
-      });
-    }
+    // Parse end of period (end of end date)
+    const endRange = TimezoneUtils.parseClientDateRange({
+      date: endDate,
+      timezoneOffset: timezoneOffset ? parseInt(timezoneOffset) : undefined,
+    });
 
-    const completions = await Task.getCompletionsForDateRange(start, end);
+    const completions = await Task.getCompletionsForDateRange(
+      startRange.startOfDay,
+      endRange.endOfDay,
+    );
 
     res.json({
       success: true,
       data: completions,
-      startDate: start.toISOString().split("T")[0],
-      endDate: end.toISOString().split("T")[0],
+      startDate,
+      endDate,
+      range: {
+        startOfPeriod: startRange.startOfDay,
+        endOfPeriod: endRange.endOfDay,
+      },
     });
   } catch (error) {
-    console.error("Error fetching completions range:", error);
+    console.error("Error fetching completion range:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to fetch completions",
+      error: "Failed to fetch completion range",
       message: error.message,
     });
   }
