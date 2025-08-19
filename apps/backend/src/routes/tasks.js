@@ -135,6 +135,16 @@ router.put("/:id", async (req, res) => {
     // Handle completed field for one-time tasks
     if (completed !== undefined) {
       updateData.completed = completed;
+
+      // Reset timer status when task is manually marked as completed
+      if (
+        completed === true &&
+        existingTask.timerStatus &&
+        existingTask.timerStatus !== "not_started"
+      ) {
+        updateData.timerStatus = "not_started";
+        updateData.timerStartedAt = null;
+      }
     }
 
     // Handle duration updates
@@ -211,6 +221,15 @@ router.post("/:id/complete", async (req, res) => {
     const completionTime = completedAt ? new Date(completedAt) : new Date();
     const completion = await Task.markComplete(taskId, completionTime);
 
+    // Reset timer status when task is manually completed
+    if (task.timerStatus && task.timerStatus !== "not_started") {
+      await Task.update(taskId, {
+        text: task.text,
+        timerStatus: "not_started",
+        timerStartedAt: null,
+      });
+    }
+
     res.json({
       success: true,
       data: completion,
@@ -248,6 +267,15 @@ router.delete("/:id/complete", async (req, res) => {
     });
 
     const removed = await Task.markIncomplete(taskId, startOfDay, endOfDay);
+
+    // Reset timer status when task is marked incomplete
+    if (removed && task.timerStatus && task.timerStatus !== "not_started") {
+      await Task.update(taskId, {
+        text: task.text,
+        timerStatus: "not_started",
+        timerStartedAt: null,
+      });
+    }
 
     if (removed) {
       res.json({

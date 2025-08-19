@@ -21,17 +21,18 @@ export const InlineTimer: React.FC<InlineTimerProps> = React.memo(
   ({
     taskId,
     durationSeconds,
-    timerStatus = "not_started",
+    timerStatus: _timerStatus = "not_started",
     onTimerComplete,
     onTimerUpdate,
   }) => {
     const [currentStatus, setCurrentStatus] =
-      useState<TimerStatus>(timerStatus);
+      useState<TimerStatus>("not_started");
     const [timeRemaining, setTimeRemaining] = useState<number>(
       durationSeconds || 0,
     );
     const [elapsed, setElapsed] = useState<number>(0);
     const [isLoading, setIsLoading] = useState(false);
+    const [isInitialized, setIsInitialized] = useState(false);
     const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const soundRef = useRef<Audio.Sound | null>(null);
     const notificationSentRef = useRef<boolean>(false);
@@ -39,8 +40,41 @@ export const InlineTimer: React.FC<InlineTimerProps> = React.memo(
     const colorScheme = useColorScheme();
     const colors = Colors[colorScheme ?? "light"];
 
-    // Local countdown timer - no API polling
+    // Initialize timer state from server on mount
     useEffect(() => {
+      const initializeTimer = async () => {
+        if (!taskId || !durationSeconds) {
+          setIsInitialized(true);
+          return;
+        }
+
+        try {
+          const status = await TimerService.getTimerStatus(taskId);
+          setCurrentStatus(status.status);
+          setElapsed(status.elapsed);
+          setTimeRemaining(status.remainingSeconds || durationSeconds);
+
+          if (onTimerUpdate) {
+            onTimerUpdate(status);
+          }
+        } catch (error) {
+          console.error("Failed to initialize timer status:", error);
+          // Fallback to default state
+          setCurrentStatus("not_started");
+          setTimeRemaining(durationSeconds);
+          setElapsed(0);
+        } finally {
+          setIsInitialized(true);
+        }
+      };
+
+      initializeTimer();
+    }, [taskId, durationSeconds]);
+
+    // Local countdown timer - only start after initialization
+    useEffect(() => {
+      if (!isInitialized) return;
+
       if (currentStatus === "running" && timeRemaining > 0) {
         intervalRef.current = setInterval(() => {
           setTimeRemaining((prev) => {
@@ -68,7 +102,7 @@ export const InlineTimer: React.FC<InlineTimerProps> = React.memo(
           clearInterval(intervalRef.current);
         }
       };
-    }, [currentStatus, timeRemaining]);
+    }, [currentStatus, timeRemaining, isInitialized]);
 
     // Handle timer completion
     useEffect(() => {
@@ -291,7 +325,7 @@ export const InlineTimer: React.FC<InlineTimerProps> = React.memo(
       }
     };
 
-    if (!durationSeconds) {
+    if (!durationSeconds || !isInitialized) {
       return null;
     }
 

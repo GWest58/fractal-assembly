@@ -12,7 +12,6 @@ import {
   TaskFrequency,
 } from "@/types/Task";
 import { apiClient, checkApiConnection } from "@/services/api";
-import { DateUtils } from "@/utils/dateUtils";
 
 interface TaskState {
   tasks: Task[];
@@ -191,9 +190,8 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         return;
       }
 
-      // Pass local date to ensure proper timezone handling
-      const localDate = DateUtils.getTodayString();
-      const apiTasks = await apiClient.getTasks(localDate);
+      // Get tasks without date parameter to avoid backend duplication issues
+      const apiTasks = await apiClient.getTasks();
       const tasks = apiTasks.map((apiTask: any) =>
         convertApiTaskToTask(apiTask),
       );

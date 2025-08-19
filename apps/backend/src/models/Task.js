@@ -500,6 +500,12 @@ class Task {
         // Mark task as completed
         if (task.frequency) {
           await Task.markComplete(taskId);
+          // Reset timer status for recurring tasks
+          await Task.update(taskId, {
+            text: task.text,
+            timerStatus: "not_started",
+            timerStartedAt: null,
+          });
         } else {
           await Task.update(taskId, {
             text: task.text,
